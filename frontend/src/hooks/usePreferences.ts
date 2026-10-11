@@ -5,6 +5,17 @@ import { db, ensureDefaults } from '../db/database';
 import type { Preferences } from '../types';
 import { useEffect } from 'react';
 
+// Module-level default so re-renders don't create new object identities
+// or call impure Date during render.
+const DEFAULT_PREFERENCES: Preferences = {
+  id: 'default',
+  interests: [],
+  excludedTopics: [],
+  defaultDuration: 5,
+  theme: 'light',
+  updatedAt: new Date(0).toISOString(),
+};
+
 export function usePreferences() {
   useEffect(() => {
     ensureDefaults();
@@ -13,7 +24,12 @@ export function usePreferences() {
   const preferences = useLiveQuery(() => db.preferences.get('default'));
 
   const updatePreferences = async (updates: Partial<Preferences>) => {
-    await db.preferences.update('default', {
+    // put() (not update()) so a race with async ensureDefaults can't silently
+    // no-op when the 'default' row doesn't exist yet.
+    const current = await db.preferences.get('default');
+    await db.preferences.put({
+      ...DEFAULT_PREFERENCES,
+      ...current,
       ...updates,
       updatedAt: new Date().toISOString(),
     });
@@ -32,14 +48,7 @@ export function usePreferences() {
   };
 
   return {
-    preferences: preferences ?? {
-      id: 'default',
-      interests: [],
-      excludedTopics: [],
-      defaultDuration: 5,
-      theme: 'light' as const,
-      updatedAt: new Date().toISOString(),
-    },
+    preferences: preferences ?? DEFAULT_PREFERENCES,
     updatePreferences,
     toggleInterest,
     setDuration,

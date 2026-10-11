@@ -10,8 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "dexie": "^4.4.6",
+    "dexie-react-hooks": "^1.1.7",
+    "lucide-react": "^1.55.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

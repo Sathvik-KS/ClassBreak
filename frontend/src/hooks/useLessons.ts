@@ -11,7 +11,7 @@ export function useLessons() {
   ) ?? [];
 
   const downloadedLessons = useLiveQuery(() =>
-    db.lessons.where('isDownloaded').equals(1).toArray()
+    db.lessons.filter(l => l.isDownloaded).toArray()
   ) ?? [];
 
   const reviewItems = useLiveQuery(() =>

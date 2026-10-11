@@ -12,10 +12,14 @@ export class ClassBreakDB extends Dexie {
 
   constructor() {
     super('classbreak');
+    // NOTE: only valid IndexedDB key types (string/number/date) may be indexed.
+    // Boolean fields (isDownloaded, synced) must NOT be indexed — boolean
+    // values are not valid keys, so such records are silently excluded from
+    // the index and index queries can never match them. Query with .filter().
     this.version(1).stores({
       preferences: 'id',
-      lessons: 'id, topic, domain, savedAt, isDownloaded',
-      quizAttempts: 'id, lessonId, completedAt, synced',
+      lessons: 'id, topic, domain, savedAt',
+      quizAttempts: 'id, lessonId, completedAt',
       reviewItems: 'id, lessonId, nextReviewAt',
       feedHistory: 'id, feedItemId, timestamp',
     });
