@@ -5,71 +5,72 @@ each other directly. The user must direct the other agent to resume.
 
 ## Current state
 
-- **Last updated:** 2026-10-11 12:20
-- **Git:** repository initialized 2026-10-11 (none existed before). Initial
-  commit contains the pre-existing Antigravity work + coordination docs +
-  `AUDIT_REPORT.md`. Branch: `main`.
-- **Last agent:** OpenCode (recovery/reconnaissance session)
-- **Other agents:** "Session 2" auditor ran a read-only audit in this same
-  workspace (see `AUDIT_REPORT.md`, committed). It modified no source files,
-  confirmed the same defects, and handed off. Its recommendations are folded
-  into TASKS.md. If a THIRD session (Antigravity) resumes, follow §7 of
-  AGENTS.md — check `git status` first for uncommitted work.
+- **Last updated:** 2026-10-11, end of session (core loop complete, servers stopped)
+- **Git:** branch `main`, ~4 commits, clean working tree at handoff
+  (this handoff + status files are committed with the final commit).
+- **Last agent:** OpenCode — recovery + build repair + full core-loop UI + PWA scaffold
+- **Other agents:** "Session 2" auditor (read-only, finished; see AUDIT_REPORT.md)
+- **Running processes:** none — uvicorn and vite preview were stopped; no dev servers left up
 
 ## What OpenCode did this session (2026-10-11)
 
-1. Full repository inspection (no files deleted or overwritten).
-   Findings recorded in PROJECT_STATUS.md.
-2. Created `backend/venv` (Python 3.13.1) and installed `requirements.txt`.
-   Verified: `pytest tests -q` → **27 passed**.
-3. Reproduced the frontend build failure (`npm run build`):
-   - `node_modules` inconsistent with `package.json`/`package-lock.json`
-     (corrupt `dexie`, missing `dexie-react-hooks`, orphan `react-router`).
-   - TS1294 in `src/services/api.ts` (constructor parameter property vs
-     `erasableSyntaxOnly`).
-4. Created coordination files: `AGENTS.md`, `PROJECT_STATUS.md`,
-   `TASKS.md`, `HANDOFF.md`; `git init` + initial commit.
-
-No application source files were modified in this session.
+1. **Reconnaissance** — found: no git, no UI (App.tsx was the Vite template),
+   broken frontend build, healthy backend (27/27 tests). Wrote the four
+   coordination files + git init (commit `9e1ef20`).
+2. **Folded in** Session 2's independent audit (AUDIT_REPORT.md) and corrected
+   one of my own claims (Dexie boolean-index behavior). Commit `8458c7a`.
+3. **Repaired the frontend build** (commit `2f4e7e7`): declared
+   `dexie`/`dexie-react-hooks`/`react-router-dom`/`lucide-react` + clean
+   `npm install --prefer-offline` (node_modules had been corrupt from an
+   interrupted install); fixed TS1294 param property in `api.ts`; removed
+   boolean indexes from the Dexie schema + `.filter()` query in `useLessons`;
+   fixed `usePreferences` impure-render default + ensureDefaults update race.
+4. **Built the entire core-loop UI** (final commit): App shell with bottom tab
+   nav + online/offline badge; Discover feed; Lesson reader (XSS-safe markdown,
+   sources, related-topic chips, download/delete); Quiz (MC + open-ended,
+   results, SRS rescheduling); Saved library; Review (due list, remembered/
+   forgot); Tutor chat (suggestion chips); Settings (interests, duration,
+   backend health); mobile-first CSS with dark mode; PWA (manifest, icon,
+   static-only service worker, PROD registration). New modules:
+   `services/lessonStore.ts`, `services/generateLesson.ts`,
+   `utils/markdown.ts`, `components/Markdown.tsx`, `pages/*` (7 pages).
 
 ## Commands executed and actual results
 
 | Command | Result |
 |---|---|
-| `git status` (before init) | fatal: not a git repository |
-| `python -m venv venv` + pip install (backend) | success, fastapi 0.115.6 importable |
-| `venv\Scripts\python -m pytest tests -q` | 27 passed in 4.26s (pytest-asyncio deprecation warning only) |
-| `npm run lint` (frontend) | 1 warning: `src/hooks/usePreferences.ts:41` impure `Date` in render |
-| `npm run build` (frontend) | FAIL: TS7016/TS2339/TS7006 (dexie types) + TS1294 (`api.ts:8`) |
+| `venv\Scripts\python -m pytest tests -q` | 27 passed (4.26s) |
+| `npm run lint` | clean |
+| `npm run build` | green — 399 kB JS / 10 kB CSS (127/2.9 kB gzip) |
+| uvicorn (mock) + `npm run preview` + browser E2E | full loop verified, 0 console errors |
+| uvicorn during E2E | all API calls 200; Wikipedia `/page/related/` → **403 decommissioned** |
 
-## Outstanding issues
+## New defect found this session (not yet fixed)
 
-- Frontend does not build; no UI exists (`App.tsx` is the Vite starter).
-- Dexie schema indexes booleans → runtime `DataError` risk on `put()`.
-- Rate limiting configured but not applied to any route.
-- AI lesson references not actually validated against fetched sources.
-- README overstates shipped features (PWA/offline).
-- Open decision: PostgreSQL/auth vs. documented local-first design (user needed).
+- **Wikipedia `/page/related/` decommissioned (403, T376297)** → multi-source
+  grounding degraded to single-source (summary endpoint still works; app
+  degrades gracefully). Task + proposed fix (opensearch/extracts API) in
+  TASKS.md.
 
 ## Current task
 
-Reconnaissance complete; next task per TASKS.md:
-**"Repair frontend build foundation"** (manifest deps + TS fixes + Dexie schema
-fix), then build the core UI incrementally.
+None in progress. Core-loop sprint is COMPLETE. Working tree clean.
 
 ## Exact next step for whichever agent picks this up
 
 1. Read `AGENTS.md`, `PROJECT_STATUS.md`, `TASKS.md`, this file.
-2. Run `git status` — if non-empty, another agent owns uncommitted work: stop and
-   read the diff before doing anything.
-3. Take the first non-DONE item in TASKS.md under "Current sprint", in order.
+2. `git status` — non-empty means another agent owns uncommitted work: stop and read the diff.
+3. Recommended next task (highest value, safe): **TASKS.md "Replace
+   `/page/related/` with a supported Wikipedia search API"** (source grounding
+   integrity), then the **backend hardening** block (rate limiting first —
+   required before any real Gemini key is configured).
 4. After each task: `npm run lint`, `npm run build`, backend pytest; update
    TASKS.md/HANDOFF.md/PROJECT_STATUS.md; commit.
 
 ## Review requested
 
-- Antigravity: review the Dexie boolean-index finding and the planned
-  dependency additions (dexie, dexie-react-hooks, react-router-dom) before UI
-  work diverges, if you disagree — raise it via TASKS.md.
-- Cross-reference: `AUDIT_REPORT.md` §4 (confirmed bugs) and §11 (fix order)
-  — implementation follows the same order.
+- Antigravity: the PWA offline behavior needs a **real device/visible-browser
+  test** (task marked REVIEW in TASKS.md) — service worker registration and
+  offline lesson reading are unverified at runtime.
+- Any agent touching `package.json` on this machine: npm registry access here
+  is slow (3.5–58 s/request); use `npm install --prefer-offline`.

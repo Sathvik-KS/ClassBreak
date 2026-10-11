@@ -24,31 +24,43 @@ export function truncate(text: string, maxLen: number): string {
   return text.slice(0, maxLen - 1) + '…';
 }
 
+// NOTE: no Tailwind in this project — these return semantic CSS class
+// names defined in src/App.css.
+const DOMAIN_CLASSES: Record<string, string> = {
+  science: 'chip-blue',
+  physics: 'chip-blue',
+  biology: 'chip-green',
+  mathematics: 'chip-cyan',
+  technology: 'chip-purple',
+  programming: 'chip-indigo',
+  ai: 'chip-violet',
+  'computer science': 'chip-indigo',
+  engineering: 'chip-slate',
+  psychology: 'chip-pink',
+  philosophy: 'chip-amber',
+  history: 'chip-orange',
+  music: 'chip-rose',
+  language: 'chip-teal',
+  economics: 'chip-emerald',
+  art: 'chip-fuchsia',
+  literature: 'chip-yellow',
+};
+
 export function getDomainColor(domain: string): string {
-  const colors: Record<string, string> = {
-    science: 'bg-blue-50 text-blue-700',
-    technology: 'bg-purple-50 text-purple-700',
-    programming: 'bg-indigo-50 text-indigo-700',
-    ai: 'bg-violet-50 text-violet-700',
-    engineering: 'bg-slate-100 text-slate-700',
-    psychology: 'bg-pink-50 text-pink-700',
-    philosophy: 'bg-amber-50 text-amber-700',
-    history: 'bg-orange-50 text-orange-700',
-    music: 'bg-rose-50 text-rose-700',
-    language: 'bg-teal-50 text-teal-700',
-    mathematics: 'bg-cyan-50 text-cyan-700',
-    'computer science': 'bg-indigo-50 text-indigo-700',
-  };
-  return colors[domain.toLowerCase()] || 'bg-gray-50 text-gray-700';
+  return DOMAIN_CLASSES[domain.toLowerCase()] || 'chip-gray';
 }
 
 export function getDifficultyColor(difficulty: string): string {
   switch (difficulty) {
-    case 'beginner': return 'text-emerald-700 bg-emerald-50';
-    case 'intermediate': return 'text-amber-700 bg-amber-50';
-    case 'advanced': return 'text-red-700 bg-red-50';
-    default: return 'text-gray-700 bg-gray-50';
+    case 'beginner': return 'diff-beginner';
+    case 'intermediate': return 'diff-intermediate';
+    case 'advanced': return 'diff-advanced';
+    default: return 'diff-default';
   }
+}
+
+export function normalizeDifficulty(d: string): 'beginner' | 'intermediate' | 'advanced' {
+  return d === 'intermediate' || d === 'advanced' ? d : 'beginner';
 }
 
 /** Build lesson content string for quiz/tutor context */

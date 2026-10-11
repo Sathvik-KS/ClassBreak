@@ -1,112 +1,96 @@
 # PROJECT_STATUS.md — ClassBreak
 
-Last updated: 2026-10-11 12:10 (by OpenCode, during recovery/reconnaissance)
+Last updated: 2026-10-11, end of OpenCode recovery + core-loop implementation session.
 
 ## 1. What currently works (verified)
 
-### Backend (`backend/`) — VERIFIED WORKING
-- FastAPI app boots; routes wired: `/api/health`, `/api/discover/feed`,
+### Backend (`backend/`) — VERIFIED WORKING (unchanged this session)
+- FastAPI app; routes: `/api/health`, `/api/discover/feed`,
   `/api/lessons/generate`, `/api/lessons/quiz`, `/api/lessons/evaluate`,
   `/api/tutor/chat`, `/api/sources/search`.
-- AI provider abstraction with two implementations:
-  - `GeminiProvider` (hosted `gemini-2.0-flash`, key from env, never exposed).
-  - `MockProvider` (deterministic fixtures, clearly labeled `[MOCK]`).
-  - Selection via `AI_PROVIDER` (`auto`/`gemini`/`mock`); `auto` → mock when no key.
-- Wikipedia source grounding via REST API (`source_manager.py`).
-- Pydantic request/response validation on every route.
-- CORS restricted to configured origins; global exception handler hides internals.
-- **Test suite: 27/27 passed** (`venv\Scripts\python -m pytest tests -q`,
-  run 2026-10-11, 4.26s). Tests cover mock provider + all routes via
-  httpx `ASGITransport` (no network calls).
+- AI provider abstraction: `GeminiProvider` (server-side key only) /
+  `MockProvider` (deterministic, labeled mock). `AI_PROVIDER=auto|gemini|mock`.
+- Wikipedia source grounding, Pydantic validation, CORS restriction,
+  generic exception handler.
+- **Tests: 27/27 pass** (`venv\Scripts\python -m pytest tests -q`, 4.26s).
+- Live-run verified 2026-10-11 (uvicorn + mock provider): health, feed,
+  lesson generate, quiz, tutor all returned 200 during browser E2E test.
 
-### Frontend infrastructure (`frontend/src/`) — CODE EXISTS, NOT WIRED, BUILD FAILS
-- `services/api.ts` — full API client for all backend endpoints.
-- `db/database.ts` — Dexie IndexedDB schema (preferences, lessons, quizAttempts,
-  reviewItems, feedHistory).
-- `hooks/useLessons.ts` — save/download/delete lessons, spaced-repetition
-  scheduling (SM-2-lite).
-- `hooks/usePreferences.ts`, `hooks/useOnlineStatus.ts`.
-- `types/index.ts` — mirrors backend models.
-- `utils/helpers.ts`, `utils/constants.ts` — helpers + domain constants.
+### Frontend (`frontend/`) — CORE LOOP BUILT AND VERIFIED
+- **`npm run lint` clean; `npm run build` green** (tsc -b && vite build ~4-6s;
+  bundle 399 kB JS + 10 kB CSS, 127/2.9 kB gzip).
+- Mobile-first UI, bottom tab navigation, react-router-dom routes:
+  `/` Discover feed, `/lesson/:id`, `/quiz/:id`, `/tutor/:id`,
+  `/saved`, `/review`, `/settings`.
+- All pages verified live in a browser against the production build
+  (vite preview) + mock backend on 2026-10-11 — see TASKS.md evidence lines:
+  feed → generate lesson → read → quiz (feedback/results/SRS reschedule) →
+  saved library → review scheduling → settings (interests/backend status) →
+  tutor chat with follow-up chips. **Zero console errors.**
+- IndexedDB (Dexie) persistence: lessons auto-saved on generation, download
+  toggle for offline, quiz attempts, SM-2-lite review scheduling, preferences,
+  bounded feed history.
+- Safe markdown renderer (escape-first, XSS-safe) for AI content.
+- PWA scaffolding: manifest, SVG icon, service worker (static-asset-only
+  caching; never caches /api/; SPA navigation fallback), PROD-only registration.
+  ⚠️ Runtime offline behavior NOT yet verified (headless env) → TASKS "REVIEW".
+- Theme: light/dark via `prefers-color-scheme`; CSS-variable design tokens.
 
 ## 2. What is partially implemented or broken
 
-- **`npm run build` FAILS** (verified 2026-10-11):
-  1. `node_modules` is inconsistent with `package.json`/`package-lock.json`:
-     `dexie@4.4.6` present but corrupt (missing type declarations),
-     `dexie-react-hooks` absent, `react-router` present but in neither manifest.
-     → tsc errors: "Could not find a declaration file for module 'dexie'",
-     cascading implicit-any errors in hooks.
-  2. `src/services/api.ts:8` — constructor parameter property
-     (`constructor(public status: number, ...)`) violates tsconfig
-     `erasableSyntaxOnly` → TS1294.
-- **No UI exists.** `src/App.tsx` is still the default Vite starter template.
-  Nothing imports the api client, database, or hooks. No components, no views,
-  no navigation, no markdown rendering.
-- **Not a PWA yet.** No `manifest.webmanifest`, no service worker, no
-  `registerSW`. README claims offline support — it is not implemented.
-- **Dexie schema bug (found in review, not yet fixed):** `database.ts` declares
-  indexes on boolean fields (`lessons.isDownloaded`, `quizAttempts.synced`).
-  Booleans are not valid IndexedDB keys, so those records are **silently
-  excluded from the index** — and `useLessons.ts:14` queries
-  `where('isDownloaded').equals(1)`, which can never match. `downloadedLessons`
-  is always empty. (`put()` does NOT throw; an earlier note claiming `DataError`
-  was wrong — corrected after cross-checking with AUDIT_REPORT.md §5.) Fix:
-  drop the boolean indexes and use `.filter()`.
-- **Rate limiting is configured but never applied.** `main.py` installs a
-  slowapi `Limiter` and `discover.py` even creates one, but **no route has a
-  `@limiter.limit` decorator** (verified by grep). Cost control is therefore
-  inactive.
-- **Fabricated-citation risk in `lessons.py`:** the comment says AI-provided
-  references are "cross-checked with actual sources", but they are accepted
-  verbatim; only missing Wikipedia refs are appended. Prompts instruct the model
-  not to invent sources, but the server does not enforce it.
-- `GeminiProvider._generate_json` uses the **synchronous** client call inside
-  async methods — blocks the event loop under load; no client timeout configured.
-- Lint: 1 warning (`usePreferences.ts:41` — impure `Date` call during render).
-- `index.html` title is still "frontend"; `frontend/README.md` is the stock
-  Vite template readme.
+- **Wikipedia `/page/related/` is decommissioned (403, T376297)** — found in
+  live backend logs 2026-10-11. `source_manager.py` silently falls back, so
+  lessons still generate but grounded on only ONE source (the summary endpoint,
+  which still works). Replacement task in TASKS.md.
+- Rate limiting configured but **not applied to any route** (slowapi decorators
+  missing) — cost control inactive with a real key.
+- AI lesson references not enforced against fetched sources (fabricated-citation
+  guard is prompt-only; `source_urls` dead code in lessons.py:59).
+- `GeminiProvider` uses sync SDK call in async context (blocks event loop; no
+  client timeout). Untestable without a key → unverified.
+- Mock lesson is a single fixed fixture regardless of topic; mock quiz = 3 fixed
+  questions.
+- Quiz attempts persist with `answers: []` (score + questions only).
+- Repeated `GET /health` 404s observed in uvicorn log — an external probe
+  (NOT the frontend, which calls `/api/health` correctly). Harmless; noted.
+- README.md overstates offline/PWA as shipped (PWA scaffold now exists but
+  offline behavior unverified). `frontend/README.md` is the stock Vite template.
 
-## 3. Dependencies and setup already completed
+## 3. Dependencies and setup completed
 
-- Backend venv: **created 2026-10-11** at `backend/venv` (Python 3.13.1) with
-  all `requirements.txt` packages installed (fastapi 0.115.6 verified).
-- Frontend `node_modules` installed but **out of sync** with the lockfile
-  (see above); needs a proper `npm install` after manifest repair.
-- No Git repository existed; initialized 2026-10-11 by OpenCode (initial commit
-  after this documentation pass).
+- `backend/venv` created 2026-10-11 (Python 3.13.1), all requirements installed.
+- Frontend: `dexie@4`, `dexie-react-hooks@1`, `react-router-dom@7`,
+  `lucide-react` added to package.json + lockfile; node_modules consistent
+  (was corrupt from an interrupted Antigravity-era install).
+- Git initialized 2026-10-11 (was not a repo). Branch `main`, 4 commits,
+  clean tree at handoff.
 
 ## 4. Checks run and results (2026-10-11)
 
 | Check | Result |
 |---|---|
 | `backend: pytest tests -q` | ✅ 27 passed (4.26s) |
-| `frontend: npm run lint` | ⚠️ 1 warning (usePreferences render purity) |
-| `frontend: npm run build` | ❌ fails — TS7016/TS2339/TS7006 (dexie types) + TS1294 (api.ts) |
+| `frontend: npm run lint` | ✅ clean (after fixes) |
+| `frontend: npm run build` | ✅ passes |
+| Browser E2E (prod build + mock backend) | ✅ full core loop, 0 console errors |
+| Wikipedia `/page/summary/` | ✅ 200 (live) |
+| Wikipedia `/page/related/` | ❌ 403 decommissioned (new bug, task filed) |
 
 ## 5. Missing environment variables (names only — no secrets)
 
-- `backend/.env` does not exist (gitignored). App runs in **mock AI mode**
-  without it. To enable real AI: copy `backend/.env.example` → `backend/.env`
-  and set `GEMINI_API_KEY`. Not required for development or tests.
-- Frontend: `VITE_API_URL` optional (defaults to `http://localhost:8000`).
+- `backend/.env` does not exist → app runs in **mock AI mode**. To enable real
+  AI: copy `backend/.env.example` → `.env`, set `GEMINI_API_KEY` (requires
+  explicit user approval per AGENTS.md — no paid calls otherwise).
+- Frontend: `VITE_API_URL` optional (defaults `http://localhost:8000`).
 
 ## 6. Architectural decisions and technical debt
 
-- **Concurrent-agent note:** a second agent session ("Session 2") ran an
-  independent **read-only audit** of this repo on 2026-10-11 ~12:08 and wrote
-  `AUDIT_REPORT.md` (committed). Its findings cross-validate this document;
-  where we differed (Dexie boolean index behavior) the correction is folded in
-  above. It modified no source files and ended with "proceed normally".
-
-- **Decision (existing, preserved):** no PostgreSQL, no authentication, no
-  server-side user data. README documents this as a deliberate privacy-first,
-  guest-first design; all user state is local (IndexedDB). This deviates from
-  the originally expected stack (PostgreSQL + auth). Changing it is an **open
-  product decision** tracked in TASKS.md — do not implement without approval.
-- **Tech debt:** rate limiting not applied to routes; citation cross-check not
-  enforced; sync Gemini call in async context; mock lesson is a single fixed
-  fixture regardless of topic; no CI; frontend has no tests; README overstates
-  implemented features (offline/PWA) — partially corrected in this pass.
-- Frontend routing: `react-router-dom` is intended (Antigravity pre-installed
-  `react-router`), pending proper manifest addition.
+- **Preserved decision:** no PostgreSQL / no auth / no server-side user data —
+  documented privacy-first, guest-first design. Open decision tracked in
+  TASKS.md (BLOCKED on user).
+- **Concurrent-agent note:** "Session 2" auditor's read-only findings
+  (`AUDIT_REPORT.md`) cross-validated and folded in; one correction absorbed
+  (Dexie booleans are excluded from indexes silently — no DataError).
+- Tech debt (details in TASKS.md "Backend hardening" + "Later"): rate limiting,
+  citation enforcement, Gemini async, mock diversity, Wikipedia related-API
+  replacement, frontend tests, CI, bundle size, quiz answer persistence.

@@ -1,0 +1,19 @@
+{
+  "name": "ClassBreak — learning companion",
+  "short_name": "ClassBreak",
+  "description": "Discover something interesting, understand it deeply, and remember it.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f6fa",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

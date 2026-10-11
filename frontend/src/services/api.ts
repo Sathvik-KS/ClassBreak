@@ -41,7 +41,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => apiFetch<{ status: string; ai_provider: string }>('/api/health'),
+  health: () => apiFetch<{ status: string; ai_provider: string; version: string }>('/api/health'),
 
   discoverFeed: (data: {
     interests?: string[];
