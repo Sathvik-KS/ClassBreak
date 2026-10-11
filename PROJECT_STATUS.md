@@ -1,20 +1,25 @@
 # PROJECT_STATUS.md — ClassBreak
 
-Last updated: 2026-10-11, end of OpenCode recovery + core-loop implementation session.
+Last updated: 2026-10-11, Wikipedia source retrieval fix session.
 
 ## 1. What currently works (verified)
 
-### Backend (`backend/`) — VERIFIED WORKING (unchanged this session)
+### Backend (`backend/`) — VERIFIED WORKING (Wikipedia sources fixed 2026-10-11)
 - FastAPI app; routes: `/api/health`, `/api/discover/feed`,
   `/api/lessons/generate`, `/api/lessons/quiz`, `/api/lessons/evaluate`,
   `/api/tutor/chat`, `/api/sources/search`.
 - AI provider abstraction: `GeminiProvider` (server-side key only) /
   `MockProvider` (deterministic, labeled mock). `AI_PROVIDER=auto|gemini|mock`.
-- Wikipedia source grounding, Pydantic validation, CORS restriction,
-  generic exception handler.
-- **Tests: 27/27 pass** (`venv\Scripts\python -m pytest tests -q`, 4.26s).
-- Live-run verified 2026-10-11 (uvicorn + mock provider): health, feed,
-  lesson generate, quiz, tutor all returned 200 during browser E2E test.
+- Wikipedia source grounding via **summary REST + MediaWiki opensearch +
+  extracts APIs** (decommissioned `/page/related/` removed), Pydantic
+  validation, CORS restriction, generic exception handler.
+- **Tests: 41/41 pass** (`venv\Scripts\python -m pytest tests -q`, 0.71s) —
+  fully offline: `conftest.py` autouse fixture routes source_manager through
+  `httpx.MockTransport` + recorded fixtures (`tests/fixtures/`, captured
+  2026-10-11).
+- Live-run verified 2026-10-11: `/api/sources/search?q=selective attention` →
+  3 sources (was 1 before the fix); nonexistent article → `[]`; lesson
+  generate → 5 references; all upstream Wikipedia calls HTTP 200.
 
 ### Frontend (`frontend/`) — CORE LOOP BUILT AND VERIFIED
 - **`npm run lint` clean; `npm run build` green** (tsc -b && vite build ~4-6s;
@@ -38,10 +43,9 @@ Last updated: 2026-10-11, end of OpenCode recovery + core-loop implementation se
 
 ## 2. What is partially implemented or broken
 
-- **Wikipedia `/page/related/` is decommissioned (403, T376297)** — found in
-  live backend logs 2026-10-11. `source_manager.py` silently falls back, so
-  lessons still generate but grounded on only ONE source (the summary endpoint,
-  which still works). Replacement task in TASKS.md.
+- ~~**Wikipedia `/page/related/` is decommissioned (403, T376297)**~~ — **FIXED
+  2026-10-11**: replaced with MediaWiki `opensearch` + `prop=extracts` (see
+  section 1). Multi-source grounding restored (3 sources/topic).
 - Rate limiting configured but **not applied to any route** (slowapi decorators
   missing) — cost control inactive with a real key.
 - AI lesson references not enforced against fetched sources (fabricated-citation
@@ -69,12 +73,12 @@ Last updated: 2026-10-11, end of OpenCode recovery + core-loop implementation se
 
 | Check | Result |
 |---|---|
-| `backend: pytest tests -q` | ✅ 27 passed (4.26s) |
-| `frontend: npm run lint` | ✅ clean (after fixes) |
-| `frontend: npm run build` | ✅ passes |
+| `backend: pytest tests -q` | ✅ 41 passed (0.71s, offline fixtures) |
+| `frontend: npm run lint` | ✅ clean |
+| `frontend: npm run build` | ✅ passes (399 kB JS / 10 kB CSS) |
 | Browser E2E (prod build + mock backend) | ✅ full core loop, 0 console errors |
 | Wikipedia `/page/summary/` | ✅ 200 (live) |
-| Wikipedia `/page/related/` | ❌ 403 decommissioned (new bug, task filed) |
+| Wikipedia opensearch + extracts | ✅ 200 (live); `/page/related/` no longer called |
 
 ## 5. Missing environment variables (names only — no secrets)
 
@@ -92,5 +96,5 @@ Last updated: 2026-10-11, end of OpenCode recovery + core-loop implementation se
   (`AUDIT_REPORT.md`) cross-validated and folded in; one correction absorbed
   (Dexie booleans are excluded from indexes silently — no DataError).
 - Tech debt (details in TASKS.md "Backend hardening" + "Later"): rate limiting,
-  citation enforcement, Gemini async, mock diversity, Wikipedia related-API
-  replacement, frontend tests, CI, bundle size, quiz answer persistence.
+  citation enforcement, Gemini async, mock diversity, frontend tests, CI,
+  bundle size, quiz answer persistence.

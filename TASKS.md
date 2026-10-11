@@ -2,7 +2,7 @@
 
 Statuses: TODO | IN PROGRESS | BLOCKED | REVIEW | DONE
 Rule: DONE requires evidence (test result, build output, or manual check recorded here).
-Last updated: 2026-10-11 (end of OpenCode recovery + core-loop implementation session)
+Last updated: 2026-10-11 (Wikipedia related-source fix session)
 
 ## Current sprint: make the app runnable end-to-end (core loop) — COMPLETE
 
@@ -57,13 +57,21 @@ Last updated: 2026-10-11 (end of OpenCode recovery + core-loop implementation se
   Wikipedia REST `/page/related/{query}` returns 403 "being decommissioned"
   (phabricator T376297). `source_manager.py` swallows this, so lessons still
   generate but with only ONE grounded source instead of up to 3.
-- [ ] **TODO** — Replace `/page/related/` with Wikipedia opensearch + article
-  extracts API (or parse summary-only grounding) to restore multi-source
-  grounding. Add a recorded-fixture test so external API decay is caught.
+- [x] **DONE** — Replace `/page/related/` with Wikipedia opensearch + article
+  extracts API to restore multi-source grounding.
+  Evidence (2026-10-11): `backend/pytest tests -q` → **41 passed** (0.71s;
+  27 existing + 14 new in `tests/test_source_manager.py`); live uvicorn check —
+  `GET /api/sources/search?q=selective attention` → 3 sources, all upstream
+  calls HTTP 200 (no `/page/related/`); nonexistent article → `[]` HTTP 200;
+  `POST /api/lessons/generate` → 5 references (2 mock AI + 3 Wikipedia).
+  Fixtures recorded 2026-10-11 in `backend/tests/fixtures/`; conftest now
+  autouse-stubs source_manager via `httpx.MockTransport` — the whole suite is
+  offline (0.71s vs 3.44s before). Handles timeouts, HTTP errors, malformed
+  JSON, missing/empty-extract pages, redirect dedupe; no new dependencies.
 
 ## Backend hardening
 
-- [ ] **TODO** — Apply slowapi rate limiting to AI endpoints
+- [ ] **NEXT** — Apply slowapi rate limiting to AI endpoints
   (`@limiter.limit` on feed/generate/quiz/evaluate/tutor; limits from settings;
   remove unused Limiter in discover.py).
 - [ ] **TODO** — Enforce citation honesty: filter AI-suggested lesson references
