@@ -5,11 +5,16 @@ each other directly. The user must direct the other agent to resume.
 
 ## Current state
 
-- **Last updated:** 2026-10-11 12:15
+- **Last updated:** 2026-10-11 12:20
 - **Git:** repository initialized 2026-10-11 (none existed before). Initial
-  commit contains the pre-existing Antigravity work + coordination docs.
-  Branch: `main`.
+  commit contains the pre-existing Antigravity work + coordination docs +
+  `AUDIT_REPORT.md`. Branch: `main`.
 - **Last agent:** OpenCode (recovery/reconnaissance session)
+- **Other agents:** "Session 2" auditor ran a read-only audit in this same
+  workspace (see `AUDIT_REPORT.md`, committed). It modified no source files,
+  confirmed the same defects, and handed off. Its recommendations are folded
+  into TASKS.md. If a THIRD session (Antigravity) resumes, follow §7 of
+  AGENTS.md — check `git status` first for uncommitted work.
 
 ## What OpenCode did this session (2026-10-11)
 
@@ -66,3 +71,5 @@ fix), then build the core UI incrementally.
 - Antigravity: review the Dexie boolean-index finding and the planned
   dependency additions (dexie, dexie-react-hooks, react-router-dom) before UI
   work diverges, if you disagree — raise it via TASKS.md.
+- Cross-reference: `AUDIT_REPORT.md` §4 (confirmed bugs) and §11 (fix order)
+  — implementation follows the same order.

@@ -47,8 +47,12 @@ Last updated: 2026-10-11 12:10 (by OpenCode, during recovery/reconnaissance)
   `registerSW`. README claims offline support — it is not implemented.
 - **Dexie schema bug (found in review, not yet fixed):** `database.ts` declares
   indexes on boolean fields (`lessons.isDownloaded`, `quizAttempts.synced`).
-  Booleans are invalid IndexedDB keys → `put()` throws `DataError` at runtime.
-  No UI exercises this yet, so it has not crashed in practice.
+  Booleans are not valid IndexedDB keys, so those records are **silently
+  excluded from the index** — and `useLessons.ts:14` queries
+  `where('isDownloaded').equals(1)`, which can never match. `downloadedLessons`
+  is always empty. (`put()` does NOT throw; an earlier note claiming `DataError`
+  was wrong — corrected after cross-checking with AUDIT_REPORT.md §5.) Fix:
+  drop the boolean indexes and use `.filter()`.
 - **Rate limiting is configured but never applied.** `main.py` installs a
   slowapi `Limiter` and `discover.py` even creates one, but **no route has a
   `@limiter.limit` decorator** (verified by grep). Cost control is therefore
@@ -88,6 +92,12 @@ Last updated: 2026-10-11 12:10 (by OpenCode, during recovery/reconnaissance)
 - Frontend: `VITE_API_URL` optional (defaults to `http://localhost:8000`).
 
 ## 6. Architectural decisions and technical debt
+
+- **Concurrent-agent note:** a second agent session ("Session 2") ran an
+  independent **read-only audit** of this repo on 2026-10-11 ~12:08 and wrote
+  `AUDIT_REPORT.md` (committed). Its findings cross-validate this document;
+  where we differed (Dexie boolean index behavior) the correction is folded in
+  above. It modified no source files and ended with "proceed normally".
 
 - **Decision (existing, preserved):** no PostgreSQL, no authentication, no
   server-side user data. README documents this as a deliberate privacy-first,
