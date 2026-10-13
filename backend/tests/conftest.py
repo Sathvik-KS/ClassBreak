@@ -44,6 +44,20 @@ def anyio_backend():
     return "asyncio"
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Isolate rate-limit counters between tests.
+
+    The limiter uses shared in-memory storage for the whole process; without
+    a reset, requests made by earlier tests count against later tests'
+    per-route budgets (all tests share one client IP).
+    """
+    storage = app.state.limiter._storage
+    storage.reset()
+    yield
+    storage.reset()
+
+
 @pytest.fixture
 async def client():
     """Async HTTP test client."""

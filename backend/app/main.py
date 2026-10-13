@@ -1,16 +1,17 @@
 """ClassBreak FastAPI application."""
 
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
+from app.rate_limit import limiter
 from app.routers import discover, lessons, tutor, sources
 
 # Configure logging — never log secrets
@@ -26,14 +27,19 @@ async def lifespan(app: FastAPI):
     """Application startup and shutdown."""
     provider_name = settings.effective_ai_provider
     logger.info(f"ClassBreak starting with AI provider: {provider_name}")
+    if settings.ai_provider not in ("auto", "gemini", "mock"):
+        logger.warning(
+            f"Unrecognized AI_PROVIDER={settings.ai_provider!r} — falling back to mock."
+        )
+    elif settings.ai_provider == "gemini" and provider_name == "mock":
+        logger.warning(
+            "AI_PROVIDER=gemini but GEMINI_API_KEY is not set — using mock provider."
+        )
     if provider_name == "mock":
-        logger.info("No API key configured — using mock provider. Set GEMINI_API_KEY in .env for real AI.")
+        logger.info("Using mock provider. Set GEMINI_API_KEY in .env for real AI.")
     yield
     logger.info("ClassBreak shutting down")
 
-
-# Rate limiter
-limiter = Limiter(key_func=get_remote_address)
 
 # Create app
 app = FastAPI(
@@ -43,9 +49,45 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Rate limiting
+# Rate limiting (see app/rate_limit.py for scope/limitations)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    """429 response using the app's {"detail": ...} error contract.
+
+    slowapi's default handler returns {"error": ...}, which the frontend's
+    API client would surface as a generic "HTTP 429". Retry-After is computed
+    from the limiter's window stats so clients know when to retry.
+    """
+    response = JSONResponse(
+        status_code=429,
+        content={"detail": f"Rate limit exceeded: {exc.detail}"},
+    )
+    try:
+        limit_item, keys = request.state.view_rate_limit
+        reset_at = app.state.limiter.limiter.get_window_stats(limit_item, *keys)[0]
+        response.headers["Retry-After"] = str(max(1, int(reset_at - time.time()) + 1))
+    except Exception:  # noqa: BLE001 — header is best-effort; never fail the 429
+        logger.debug("Could not compute Retry-After", exc_info=True)
+    return response
+
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
+
+# Basic request-size guard (JSON bodies here are small: the largest accepted
+# field is lesson_content at 10k chars). Header-only check: no body buffering.
+MAX_BODY_BYTES = 100_000
+
+
+@app.middleware("http")
+async def body_size_guard(request: Request, call_next):
+    content_length = request.headers.get("content-length", "")
+    if content_length.isdigit() and int(content_length) > MAX_BODY_BYTES:
+        return JSONResponse(
+            status_code=413, content={"detail": "Request body too large"}
+        )
+    return await call_next(request)
 
 # CORS
 app.add_middleware(

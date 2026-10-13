@@ -5,75 +5,95 @@ each other directly. The user must direct the other agent to resume.
 
 ## Current state
 
-- **Last updated:** 2026-10-11, end of Wikipedia source-retrieval fix session
-- **Git:** branch `main`, clean working tree at handoff (docs + fix committed)
-- **Last agent:** OpenCode — Wikipedia `/page/related/` replacement (this session)
-- **Prior agent:** OpenCode — recovery + build repair + full core-loop UI + PWA scaffold
-- **Other agents:** "Session 2" auditor (read-only, finished; see AUDIT_REPORT.md)
-- **Running processes:** none — uvicorn (port 8011) stopped after smoke test; no dev servers left up
+- **Last updated:** 2026-10-13, end of pre-API hardening session
+- **Git:** branch `main`, working tree contains this session's changes
+  (committed — see `git log`)
+- **Last agent:** OpenCode — pre-API hardening (rate limiting, citation
+  validation, error sanitization, config fallbacks, Gemini timeout, frontend
+  error/a11y fixes)
+- **Prior agents:** OpenCode — Wikipedia source fix (2026-10-11); OpenCode —
+  recovery + core-loop UI + PWA scaffold (2026-10-11); "Session 2" auditor
+  (read-only; AUDIT_REPORT.md)
+- **Running processes:** none — the smoke-test uvicorn on port 8010 was
+  stopped; no dev servers left up. (Port 8000 is occupied by an unrelated
+  Django dev server belonging to the user — do not use or kill it.)
 
-## What OpenCode did this session (2026-10-11)
+## What OpenCode did this session (2026-10-13)
 
-1. **Replaced the decommissioned Wikipedia REST `/page/related/` call**
-   (403, T376297) in `backend/app/services/source_manager.py` with the
-   supported MediaWiki Action API: `action=opensearch` for candidate titles +
-   `action=query&prop=extracts` (`exintro`, `explaintext`, `exchars=1000`,
-   `redirects=1`) for summaries. The REST `/page/summary/` primary path is
-   kept. Added: URL-quoting of the query, redirect/normalization resolution,
-   dedupe of primary vs related sources, missing/empty-extract page skipping,
-   and graceful degradation for timeouts / HTTP errors / malformed JSON.
-   No signature change: `search_wikipedia(query, limit=3)` and
-   `format_source_context(...)` contracts preserved; no new dependencies.
-2. **Made the backend suite hermetic**: recorded 3 live fixtures
-   (`backend/tests/fixtures/`, captured 2026-10-11), added an autouse conftest
-   fixture that routes source_manager through `httpx.MockTransport`, and added
-   `tests/test_source_manager.py` (14 tests: happy path, 403-era endpoint
-   never called, 404/500 fallbacks, timeouts, malformed JSON, missing pages,
-   limit/empty-query, format_source_context). Suite: 27 → 41 tests, and fully
-   offline (0.71s vs 3.44s).
-3. **Verified**: backend pytest 41/41; live uvicorn smoke test (3 sources from
-   `/api/sources/search`, 5 references in generated lesson, nonexistent
-   article → `[]`, upstream log shows summary → opensearch → extracts all 200);
-   frontend `npm run lint` clean, `npm run build` green.
+1. **Rate limiting enforced** (was defined-but-inert): shared slowapi limiter
+   in `app/rate_limit.py` (per-IP, per-route; documented in-memory/single-
+   process limits); `@limiter.limit` on feed/generate/quiz/evaluate/tutor
+   (30/min) and sources search (60/min); health deliberately exempt; custom
+   429 handler returns the app's `{"detail": ...}` contract + Retry-After.
+   slowapi's `headers_enabled` stays off — with FastAPI its wrapper expects a
+   `response: Response` endpoint param we don't use; Retry-After is computed
+   in the handler from window stats instead.
+2. **Citation honesty**: `validate_references()` in lessons.py — malformed
+   URLs dropped; AI refs matching actually-fetched sources → `source_type=
+   "wikipedia"`; valid but unfetched → `"provided"` (honest label). Structural
+   only, explicitly not semantic fact-checking.
+3. **Error handling**: every router logs exceptions server-side
+   (`logger.exception`) and returns generic client details (no more exception
+   class names in responses). Gemini sync SDK call now runs via
+   `asyncio.to_thread` + `asyncio.wait_for(settings.gemini_timeout)` (30 s).
+4. **Config**: invalid `RATE_LIMIT`/`RATE_LIMIT_READ` format → clear startup
+   `ValidationError` (pydantic validator); unknown `AI_PROVIDER` or
+   `gemini`-without-key falls back to mock; 100 kB request-body guard (413).
+5. **Frontend fixes** (no new deps): DiscoverPage `href="#/..."` links never
+   navigated (BrowserRouter) → react-router `Link`; QuizPage evaluation/429
+   failures were invisible mid-quiz → in-quiz error banner, cleared on retry;
+   429 server messages surfaced verbatim in Discover/Quiz/Tutor; aria-labels
+   on tutor input + quiz textarea.
+6. **Tests**: 41 → 85 (new: rate_limit, config, validation, citations,
+   errors, gemini; conftest resets limiter storage per test; `pytest.ini`
+   silences the pytest-asyncio deprecation). Suite fully offline.
+7. **Docs**: TASKS/PROJECT_STATUS updated; AGENTS.md corrected (Dexie booleans
+   are silently unindexed — no DataError thrown).
 
 ## Commands executed and actual results
 
 | Command | Result |
 |---|---|
-| `venv\Scripts\python -m pytest tests -q` | 41 passed (0.71s), offline |
+| `venv\Scripts\python -m pytest tests -q` | 85 passed, offline |
 | `npm run lint` | clean |
-| `npm run build` | green — 399 kB JS / 10 kB CSS (127/2.9 kB gzip) |
-| uvicorn + `GET /api/sources/search?q=selective attention` | 200, 3 sources (was 1) |
-| uvicorn + `POST /api/lessons/generate` | 200, 5 references (2 mock + 3 Wikipedia) |
-| uvicorn + nonexistent article query | 200, `{"sources":[],"extracts":[]}` |
+| `npm run build` | green — 399.68 kB JS / 126.65 kB gzip |
+| uvicorn(mock) :8010 + `GET /api/health` | 200, `ai_provider: mock` (no key) |
+| 31× `POST /api/tutor/chat` (mock) | 30×200 then 429 `{"detail":"Rate limit exceeded: 30 per 1 minute"}`, `Retry-After: 56`; health still 200 |
 
 ## Defects
 
-- **FIXED this session:** Wikipedia `/page/related/` 403 → replaced with
-  opensearch + extracts (details above).
-- Still open (see PROJECT_STATUS.md §2): rate limiting not applied to routes;
-  citation cross-check is prompt-only; Gemini sync-in-async; mock lesson not
-  topic-diverse; PWA offline runtime unverified (REVIEW task).
+- **FIXED this session:** inert rate limiting; fabricated-citation channel;
+  leaking error details; broken Discover hash-links; invisible mid-quiz eval
+  failures; Gemini event-loop blocking + no timeout; keyless-gemini crash
+  mode; invalid RATE_LIMIT crash.
+- **Still open** (see TASKS.md): PWA offline runtime unverified (REVIEW —
+  needs visible device); mock lesson not topic-diverse; quiz attempts store
+  `answers: []`; README overstates offline; no frontend tests (needs vitest
+  approval).
 
 ## Current task
 
-None in progress. Wikipedia source fix is COMPLETE and committed.
+None in progress. Pre-API hardening is COMPLETE and committed.
 
 ## Exact next step for whichever agent picks this up
 
 1. Read `AGENTS.md`, `PROJECT_STATUS.md`, `TASKS.md`, this file.
 2. `git status` — non-empty means another agent owns uncommitted work: stop and read the diff.
-3. Recommended next task (highest value, safe): **TASKS.md "NEXT: Apply slowapi
-   rate limiting to AI endpoints"** (required before any real Gemini key is
-   configured), then citation enforcement.
+3. Remaining high-value work before real AI: none blocking — the app is safe
+   to run against a real key once the user approves and sets
+   `backend/.env` (`GEMINI_API_KEY`); rate limiting + timeouts + citation
+   labeling are in place. Optional polish: mock diversity, README offline
+   claims, PWA device test.
 4. After each task: backend pytest, `npm run lint`, `npm run build`; update
    TASKS.md/HANDOFF.md/PROJECT_STATUS.md; commit; push `origin/main` (never
    force-push).
 
 ## Review requested
 
-- Antigravity: the PWA offline behavior needs a **real device/visible-browser
-  test** (task marked REVIEW in TASKS.md) — service worker registration and
-  offline lesson reading are unverified at runtime.
+- Antigravity/human: PWA offline behavior still needs a **real device /
+  visible-browser test** (TASKS.md "REVIEW") — SW policy was re-verified by
+  static review only (no /api/ caching, no failure caching, same-origin GET).
 - Any agent touching `package.json` on this machine: npm registry access here
   is slow (3.5–58 s/request); use `npm install --prefer-offline`.
+- Note: port 8000 is occupied on this machine by an unrelated Django dev
+  server — use another port (e.g. 8010) for uvicorn smoke tests.

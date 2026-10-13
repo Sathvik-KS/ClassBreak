@@ -81,7 +81,8 @@ npm run dev          # dev server on :5173
   AI output quality; no test covers quality, only shape.
 - `frontend/src/db/database.ts` — Dexie schema. Indexed fields must be
   valid IndexedDB key types (string/number/date). **Never index booleans** —
-  `put()` throws `DataError` at runtime.
+  IndexedDB silently skips non-key-typed values (no error is thrown), so the
+  index just doesn't work; query booleans with `.filter()` instead.
 - `frontend/src/types/index.ts` — mirrors backend Pydantic models; update both.
 - Coordination files: `PROJECT_STATUS.md`, `HANDOFF.md`, `TASKS.md`.
 

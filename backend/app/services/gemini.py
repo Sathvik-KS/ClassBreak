@@ -1,10 +1,12 @@
 """Google Gemini AI provider implementation."""
 
+import asyncio
 import json
 import logging
 from google import genai
 from google.genai import types
 
+from app.config import settings
 from app.services.ai_provider import AIProvider
 from app.services import prompts
 
@@ -22,17 +24,27 @@ class GeminiProvider(AIProvider):
         self.client = genai.Client(api_key=api_key)
 
     async def _generate_json(self, system_prompt: str, user_prompt: str) -> dict:
-        """Send a prompt to Gemini and parse the JSON response."""
+        """Send a prompt to Gemini and parse the JSON response.
+
+        The SDK call is synchronous, so it runs in a worker thread
+        (asyncio.to_thread) to keep the event loop responsive, bounded by
+        settings.gemini_timeout so an unreachable provider can't hang a
+        request indefinitely.
+        """
         try:
-            response = self.client.models.generate_content(
-                model=MODEL_NAME,
-                contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    response_mime_type="application/json",
-                    temperature=0.7,
-                    max_output_tokens=4096,
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=MODEL_NAME,
+                    contents=user_prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                        response_mime_type="application/json",
+                        temperature=0.7,
+                        max_output_tokens=4096,
+                    ),
                 ),
+                timeout=settings.gemini_timeout,
             )
             text = response.text
             if not text:
@@ -40,7 +52,7 @@ class GeminiProvider(AIProvider):
             return json.loads(text)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse Gemini JSON response: {e}")
-            raise ValueError(f"AI returned invalid JSON: {e}")
+            raise ValueError("AI returned invalid JSON")
         except Exception as e:
             logger.error(f"Gemini API error: {type(e).__name__}: {e}")
             raise

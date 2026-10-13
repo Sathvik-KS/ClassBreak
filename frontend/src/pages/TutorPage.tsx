@@ -63,7 +63,9 @@ export default function TutorPage() {
           content:
             e instanceof ApiError && e.status === 0
               ? "I can't reach the tutor service right now — check your connection."
-              : 'Something went wrong answering that. Try again?',
+              : e instanceof ApiError && e.status === 429
+                ? `${e.message} Give it a moment, then ask again.`
+                : 'Something went wrong answering that. Try again?',
         },
       ]);
     } finally {
@@ -152,6 +154,7 @@ export default function TutorPage() {
           className="input"
           type="text"
           placeholder="Ask a follow-up…"
+          aria-label="Ask the tutor a question"
           value={input}
           onChange={e => setInput(e.target.value)}
           disabled={sending}

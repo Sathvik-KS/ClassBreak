@@ -46,12 +46,17 @@ Last updated: 2026-10-11, Wikipedia source retrieval fix session.
 - ~~**Wikipedia `/page/related/` is decommissioned (403, T376297)**~~ — **FIXED
   2026-10-11**: replaced with MediaWiki `opensearch` + `prop=extracts` (see
   section 1). Multi-source grounding restored (3 sources/topic).
-- Rate limiting configured but **not applied to any route** (slowapi decorators
-  missing) — cost control inactive with a real key.
-- AI lesson references not enforced against fetched sources (fabricated-citation
-  guard is prompt-only; `source_urls` dead code in lessons.py:59).
-- `GeminiProvider` uses sync SDK call in async context (blocks event loop; no
-  client timeout). Untestable without a key → unverified.
+- ~~**Rate limiting configured but not applied to any route**~~ — **FIXED
+  2026-10-13**: `@limiter.limit` enforced on all AI-facing routes (per-IP,
+  per-route, in-memory); 429 returns `{"detail": ...}` + Retry-After;
+  `/api/health` deliberately exempt. See `app/rate_limit.py` for scope.
+- ~~**AI lesson references not enforced against fetched sources**~~ — **FIXED
+  2026-10-13**: `validate_references()` in lessons.py — structural cross-check
+  only (matching fetched source → "wikipedia"; valid but unverified →
+  "provided"; malformed dropped). No semantic fact-checking is claimed.
+- ~~**`GeminiProvider` sync SDK call in async context**~~ — **FIXED 2026-10-13**:
+  call runs in a worker thread with a 30 s timeout (`settings.gemini_timeout`).
+  Still unverified against the real API (no key, not approved).
 - Mock lesson is a single fixed fixture regardless of topic; mock quiz = 3 fixed
   questions.
 - Quiz attempts persist with `answers: []` (score + questions only).
@@ -66,19 +71,24 @@ Last updated: 2026-10-11, Wikipedia source retrieval fix session.
 - Frontend: `dexie@4`, `dexie-react-hooks@1`, `react-router-dom@7`,
   `lucide-react` added to package.json + lockfile; node_modules consistent
   (was corrupt from an interrupted Antigravity-era install).
-- Git initialized 2026-10-11 (was not a repo). Branch `main`, 4 commits,
-  clean tree at handoff.
+- Git initialized 2026-10-11 (was not a repo). Branch `main` tracking
+  `origin/main` (github.com/Sathvik-KS/ClassBreak); tree clean at handoff.
 
-## 4. Checks run and results (2026-10-11)
+## 4. Checks run and results (2026-10-13)
 
 | Check | Result |
 |---|---|
-| `backend: pytest tests -q` | ✅ 41 passed (0.71s, offline fixtures) |
+| `backend: pytest tests -q` | ✅ 85 passed (offline fixtures) |
 | `frontend: npm run lint` | ✅ clean |
-| `frontend: npm run build` | ✅ passes (399 kB JS / 10 kB CSS) |
-| Browser E2E (prod build + mock backend) | ✅ full core loop, 0 console errors |
-| Wikipedia `/page/summary/` | ✅ 200 (live) |
-| Wikipedia opensearch + extracts | ✅ 200 (live); `/page/related/` no longer called |
+| `frontend: npm run build` | ✅ passes (399.68 kB JS / 126.65 kB gzip) |
+| Live uvicorn (mock, no key) | ✅ boots; health `ai_provider: mock` |
+| Live rate limit (mock) | ✅ 30×200 → 429 `{"detail":...}`, `Retry-After: 56`; health unaffected |
+| Service worker (static review) | ✅ `/api/` never cached, no failure caching, same-origin GET only |
+| Browser E2E (2026-10-11, prod build + mock backend) | ✅ full core loop, 0 console errors |
+| Wikipedia opensearch + extracts (2026-10-11 live) | ✅ 200; `/page/related/` no longer called |
+
+(2026-10-11 rows kept for history; PWA runtime offline behavior still
+unverified — TASKS.md "REVIEW".)
 
 ## 5. Missing environment variables (names only — no secrets)
 
@@ -95,6 +105,11 @@ Last updated: 2026-10-11, Wikipedia source retrieval fix session.
 - **Concurrent-agent note:** "Session 2" auditor's read-only findings
   (`AUDIT_REPORT.md`) cross-validated and folded in; one correction absorbed
   (Dexie booleans are excluded from indexes silently — no DataError).
-- Tech debt (details in TASKS.md "Backend hardening" + "Later"): rate limiting,
-  citation enforcement, Gemini async, mock diversity, frontend tests, CI,
-  bundle size, quiz answer persistence.
+- Tech debt remaining (details in TASKS.md "Backend hardening" + "Later"):
+  mock diversity, frontend tests (needs vitest approval), CI, bundle size,
+  quiz answer persistence, PWA offline runtime verification, README offline
+  claims. Rate limiting / citation enforcement / Gemini timeout / error
+  sanitization landed 2026-10-13.
+- Rate limiter limitation (be accurate when describing it): in-memory,
+  per-process — resets on restart, not shared across workers. Cost control
+  for a single-process deployment, not distributed abuse protection.

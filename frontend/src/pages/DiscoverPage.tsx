@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { RefreshCw, Sparkles, Loader2, Compass } from 'lucide-react';
 import { api, ApiError } from '../services/api';
 import { generateAndSaveLesson } from '../services/generateLesson';
@@ -62,7 +62,9 @@ export default function DiscoverPage() {
       setError(
         e instanceof ApiError && e.status === 0
           ? 'Cannot reach the backend to generate this lesson.'
-          : 'Could not generate this lesson. Try another topic.',
+          : e instanceof ApiError && e.status === 429
+            ? e.message // surface the rate-limit message instead of a misleading hint
+            : 'Could not generate this lesson. Try another topic.',
       );
     } finally {
       setGeneratingTopic(null);
@@ -75,7 +77,7 @@ export default function DiscoverPage() {
         <div className="empty-state">
           <Compass size={36} className="muted-icon" />
           <h2>You're offline</h2>
-          <p>Discovery needs a connection. Your <a href="#/saved">downloaded lessons</a> are still readable.</p>
+          <p>Discovery needs a connection. Your <Link to="/saved">downloaded lessons</Link> are still readable.</p>
         </div>
       </div>
     );
@@ -96,7 +98,7 @@ export default function DiscoverPage() {
       {error && <div className="banner banner-error">{error}</div>}
       {preferences.interests.length === 0 && (
         <div className="banner banner-info">
-          Tip: pick your interests in <a href="#/settings">Settings</a> to personalize the feed.
+          Tip: pick your interests in <Link to="/settings">Settings</Link> to personalize the feed.
         </div>
       )}
 

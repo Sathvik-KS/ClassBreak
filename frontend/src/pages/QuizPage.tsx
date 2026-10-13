@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, XCircle, Loader2, Trophy, WifiOff, HelpCircle } from 'lucide-react';
-import { api } from '../services/api';
+import { api, ApiError } from '../services/api';
 import { getSavedLesson } from '../services/lessonStore';
 import { useLessons } from '../hooks/useLessons';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
@@ -47,8 +47,14 @@ export default function QuizPage() {
           count: QUESTION_COUNT,
         });
         setQuestions(res.questions);
-      } catch {
-        setError('Could not generate quiz questions. Check your connection and try again.');
+      } catch (e) {
+        // Surface server messages (e.g. 429 rate limit) verbatim; fall back to
+        // a connection hint only when the request never reached the server.
+        setError(
+          e instanceof ApiError && e.status !== 0
+            ? e.message
+            : 'Could not generate quiz questions. Check your connection and try again.',
+        );
       } finally {
         setLoading(false);
       }
@@ -86,6 +92,7 @@ export default function QuizPage() {
     const q = questions[currentIndex];
     if (!openAnswer.trim()) return;
     setEvaluating(true);
+    setError(null); // clear any previous failure so a retry gives fresh feedback
     try {
       const res = await api.evaluateAnswer({
         question: q.question,
@@ -96,8 +103,14 @@ export default function QuizPage() {
       setScores(prev => [...prev, res.score]);
       setFeedback(res.feedback);
       setRevealed(true);
-    } catch {
-      setError('Evaluation failed — check your connection.');
+    } catch (e) {
+      // Shown in the in-quiz banner below — without it the failed submission
+      // would leave the user staring at an unchanged form.
+      setError(
+        e instanceof ApiError && e.status !== 0
+          ? e.message
+          : 'Evaluation failed — check your connection.',
+      );
     } finally {
       setEvaluating(false);
     }
@@ -188,6 +201,10 @@ export default function QuizPage() {
         </div>
       </div>
 
+      {error && (
+        <div className="banner banner-error" role="alert">{error}</div>
+      )}
+
       <div className="card quiz-card">
         <Markdown source={q.question} />
 
@@ -233,6 +250,7 @@ export default function QuizPage() {
               className="textarea"
               rows={4}
               placeholder="Type your answer…"
+              aria-label="Your answer to the open-ended question"
               value={openAnswer}
               onChange={e => setOpenAnswer(e.target.value)}
               disabled={revealed}

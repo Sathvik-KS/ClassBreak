@@ -9,9 +9,9 @@ A mobile-first, curiosity-driven learning companion designed for short breaks th
 - **Discovery Feed** — Personalized suggestions of intriguing concepts and questions
 - **Topic Exploration** — Browse domains, search subjects, follow related concepts
 - **AI Tutor** — Get explanations, follow-up answers, analogies, adjustable depth
-- **Source-Grounded Lessons** — Readable lessons with examples, takeaways, and citations
+- **Source-Grounded Lessons** — Readable lessons with examples, takeaways, and citations validated against fetched sources
 - **Quiz & Review** — Comprehension questions with spaced review scheduling
-- **Offline Support** — Download lessons for offline reading and review
+- **Offline Support** — Mark lessons as downloaded; downloaded lessons are stored locally (IndexedDB) for offline reading and review
 - **Guest-First** — No account required; all data stored locally
 
 ## Quick Start
@@ -69,7 +69,7 @@ ClassBreak/
 - **Frontend** handles all user data locally (IndexedDB via Dexie.js)
 - **Backend** proxies AI requests (protects API keys) and fetches reference sources
 - **No server-side user database** — stateless backend, privacy-first
-- **PWA** — installable, works offline with downloaded content
+- **PWA** — installable; static app shell cached for offline launch, downloaded lessons read from IndexedDB. (Offline behavior implemented but not yet verified on a real device.)
 
 ## License
 
