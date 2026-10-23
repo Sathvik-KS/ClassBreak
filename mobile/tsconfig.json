@@ -1,0 +1,29 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    // Lets test files import local modules with an explicit .ts extension,
+    // which Node 24's native TypeScript support requires (noEmit is already
+    // set by the Expo base config).
+    "allowImportingTsExtensions": true,
+    // Only @types/node is loaded as ambient (global) types for the test
+    // files; library types like React resolve through normal imports.
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@/assets/*": [
+        "./assets/*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
+}
