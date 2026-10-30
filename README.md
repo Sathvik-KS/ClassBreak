@@ -1,76 +1,41 @@
 # ClassBreak
 
-A mobile-first, curiosity-driven learning companion designed for short breaks throughout the day.
+ClassBreak is a mobile-first learning companion for short breaks. It helps you
+discover an interesting topic, read an AI-assisted lesson with Wikipedia source
+grounding, ask follow-up questions, take a quiz, and save lessons for later
+review.
 
-**Core promise**: Discover something interesting, understand it deeply enough to use it, and remember it beyond the current session.
+## Components
 
-## Features
+- **Web (`frontend/`)** — mobile-first React client with saved lessons, quizzes,
+  tutor chat, and spaced review. User data lives in IndexedDB.
+- **Mobile (`mobile/`)** — Android-first Expo app with the same core learning
+  loop. Saved lessons and review schedules live on the device in AsyncStorage.
+- **Backend (`backend/`)** — stateless FastAPI service that proxies AI requests
+  and fetches Wikipedia sources. It stores no user data and requires no account.
 
-- **Discovery Feed** — Personalized suggestions of intriguing concepts and questions
-- **Topic Exploration** — Browse domains, search subjects, follow related concepts
-- **AI Tutor** — Get explanations, follow-up answers, analogies, adjustable depth
-- **Source-Grounded Lessons** — Readable lessons with examples, takeaways, and citations validated against fetched sources
-- **Quiz & Review** — Comprehension questions with spaced review scheduling
-- **Offline Support** — Mark lessons as downloaded; downloaded lessons are stored locally (IndexedDB) for offline reading and review
-- **Guest-First** — No account required; all data stored locally
+## Technology
 
-## Quick Start
+- **Web:** React 19, TypeScript, Vite, Dexie, React Router, plain CSS.
+- **Mobile:** Expo SDK 57, React Native, Expo Router, TypeScript, AsyncStorage.
+- **Backend:** Python 3.13, FastAPI, Pydantic, httpx, Google Gen AI SDK, slowapi.
+- **AI:** Google Gemini when a server-side key is configured, otherwise a
+  built-in mock provider. Mock mode removes the AI-key requirement only; it
+  still needs the backend and still attempts Wikipedia source lookups. Reading
+  saved lessons is the offline capability.
 
-### Prerequisites
+## Prerequisites
 
-- Python 3.13+
-- Node.js 22+
-- A Gemini API key (optional — works with mock data without one)
+- Python 3.13+ and pip for the backend.
+- Node.js 22+ and npm for web development.
+- Node.js 24+ for the current mobile test command, which relies on native
+  TypeScript execution; npm for the Expo mobile app.
+- Expo Go or an Android emulator/device for the mobile app.
+- A Gemini API key is optional; the app runs in mock mode without one, but
+  mock mode still requires the backend.
 
-### Backend
+## Documentation
 
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate        # Windows
-pip install -r requirements.txt
-cp .env.example .env         # Edit to add your API key
-uvicorn app.main:app --reload --port 8000
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev                  # Starts on http://localhost:5173
-```
-
-### Production Build
-
-```bash
-cd frontend
-npm run build                # Output in frontend/dist/
-```
-
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GEMINI_API_KEY` | No | Google Gemini API key. Without it, the app uses mock AI responses. |
-| `AI_PROVIDER` | No | `auto` (default), `gemini`, or `mock` |
-| `CORS_ORIGINS` | No | Comma-separated allowed origins. Default: `http://localhost:5173` |
-
-## Architecture
-
-```
-ClassBreak/
-├── backend/          # FastAPI (Python) — AI proxy, source manager, rate limiting
-├── frontend/         # React + Vite PWA — mobile-first UI, IndexedDB, service worker
-├── .gitignore
-└── README.md
-```
-
-- **Frontend** handles all user data locally (IndexedDB via Dexie.js)
-- **Backend** proxies AI requests (protects API keys) and fetches reference sources
-- **No server-side user database** — stateless backend, privacy-first
-- **PWA** — installable; static app shell cached for offline launch, downloaded lessons read from IndexedDB. (Offline behavior implemented but not yet verified on a real device.)
-
-## License
-
-Private — not yet licensed for distribution.
+See [AGENTS.md](AGENTS.md) for the authoritative architecture, setup,
+development commands, testing, configuration, environment variables, and
+contribution instructions.
