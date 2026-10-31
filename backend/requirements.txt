@@ -1,6 +1,8 @@
+# Python 3.14 (validated on 3.14.4). pydantic 2.12.5 ships cp314 wheels;
+# 2.10.4 pulls pydantic-core 2.27.2, which needs Rust/maturin to build.
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-pydantic==2.10.4
+pydantic==2.12.5
 pydantic-settings==2.7.1
 httpx==0.28.1
 google-genai==1.14.0

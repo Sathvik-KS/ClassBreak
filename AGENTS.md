@@ -12,9 +12,10 @@ inspect the relevant source before changing anything.** Do not trust old
 claims or assume a feature is finished because it is described here; verify it
 in code first.
 
-Status snapshot: source inspection on **2026-10-30**. Latest commit at that
-time was `85e22fd` (2026-10-23, mobile app). Runtime results quoted below are
-the last recorded evidence, not necessarily re-run on the current machine.
+Status snapshot: backend dependency/setup validation on **2026-10-31** against
+**Python 3.14.4**. Latest commit at that time was `95d187b` (documentation
+consolidation). Runtime results quoted below are the last recorded evidence;
+the backend results in §12 were rerun on the validation machine on 2026-10-31.
 
 ---
 
@@ -148,12 +149,24 @@ Key properties:
 
 ### 4.1 Stack
 
-- Python target: **3.13** (documented; requirements are pinned and were
-  installed under Python 3.13 in earlier sessions).
-- FastAPI `0.115.6`, Uvicorn `0.34.0`, Pydantic `2.10.4`,
-  pydantic-settings `2.7.1`, httpx `0.28.1`, google-genai `1.14.0`,
-  slowapi `0.1.9`, python-dotenv `1.0.1`.
+- Python target: **3.14** (validated on **3.14.4** on Linux x86_64). Python
+  3.13 and older are not part of the validated setup.
+- FastAPI `0.115.6`, Uvicorn `0.34.0`, Pydantic `2.12.5` (with
+  pydantic-core `2.41.5`), pydantic-settings `2.7.1`, httpx `0.28.1`,
+  google-genai `1.14.0`, slowapi `0.1.9`, python-dotenv `1.0.1`.
 - Tests: pytest `8.3.4`, pytest-asyncio `0.25.0`, anyio `4.8.0`.
+- Pydantic `2.12.5` is the validated Python 3.14 version. Pydantic `2.10.4`
+  pulls pydantic-core `2.27.2`, which has no cp314 wheel and fails while trying
+  to build with Rust/maturin.
+- All required distributions resolve to binary wheels on CPython 3.14 for
+  Linux x86_64 and Windows x86_64. No Rust, C compiler, or maturin is needed on
+  those platforms. `uvloop` has no Windows wheel, but Uvicorn's
+  `sys_platform != "win32"` marker skips it there.
+- Known Python 3.14 deprecation warnings: FastAPI/Starlette/slowapi use
+  `asyncio.iscoroutinefunction`, pytest-asyncio uses
+  `asyncio.get_event_loop_policy`, and anyio `4.8.0` emits a `SyntaxWarning`.
+  These are warnings only; the suite passes. The versions were deliberately not
+  upgraded during the compatibility fix.
 - `pytest.ini` sets `asyncio_default_fixture_loop_scope = function`.
 
 ### 4.2 Routes
@@ -699,39 +712,73 @@ backend must also listen on the LAN (see the mobile run instructions below).
 
 ### Prerequisites
 
-- Backend: Python 3.13+, pip, a virtual environment.
+- Backend: Python **3.14.x** (validated on **3.14.4**), `pip`, and `venv`.
+  On Kubuntu/Debian, install the matching `python3.14-venv` package if
+  `python3.14 -m venv` reports that `ensurepip` is unavailable.
+- No Rust, C compiler, or `maturin` is needed on supported Linux/Windows x86_64
+  setups; the dependency set installs from binary wheels. Uvicorn's `uvloop`
+  extra is skipped on Windows by its platform marker.
 - Web: Node.js 22+ and npm.
 - Mobile: Node.js + npm, Expo tooling (installed via `npm install`), and
-  Expo Go or an Android emulator/device.
+  Expo Go or an Android emulator/device. Use Node.js 24+ for the native
+  TypeScript test command.
 - A Gemini API key is optional; without one the backend uses mock AI, but the
   backend is still required.
+
+All backend commands below run **from `backend/`**. Verify the interpreter with
+`python --version` after activation; it must report 3.14.x.
 
 ### Backend — Linux/macOS
 
 ```bash
 cd backend
-python3 -m venv venv
+python3.14 -m venv venv
 source venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+python -m pip check
 cp .env.example .env          # optional; edit only if you need real AI
 python -m uvicorn app.main:app --reload --port 8000
 ```
+
+If `python3.14` is not on `PATH`, substitute the interpreter that reports
+3.14.4. The virtual environment uses `venv/bin/` for `python`, `pip`, and
+`uvicorn`.
 
 ### Backend — Windows (PowerShell)
 
 ```powershell
 cd backend
-py -3.13 -m venv venv
+py -3.14 -m venv venv
 .\venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-Copy-Item .env.example .env   # optional
+python -m pip check
+Copy-Item .env.example .env   # optional; edit only if you need real AI
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-If PowerShell blocks activation, use
+The virtual environment uses `venv\Scripts\` for `python.exe`, `pip.exe`, and
+`uvicorn.exe`. If PowerShell blocks activation, use
 `.\venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000`
 directly, or run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`
 for the current shell only.
+
+### Backend — common operations
+
+From `backend/` with the venv active:
+
+```bash
+python -m pytest tests -q     # offline test suite
+python -m pip check           # dependency consistency
+deactivate                    # leave the venv
+```
+
+To recreate the environment, deactivate it, remove `venv` (`rm -rf venv` on
+Linux/macOS; `Remove-Item -Recurse -Force venv` in PowerShell), then repeat the
+setup commands. Do not reuse an environment created with another Python
+version. The health endpoint is <http://localhost:8000/api/health>; docs are at
+<http://localhost:8000/docs>.
 
 ### Web — Linux/macOS and Windows
 
@@ -825,8 +872,17 @@ tests. Do not make tests depend on live Wikipedia or paid AI calls.
 
 Current backend test inventory: **12 test modules, 83 test functions, 85
 collected cases** (the extra two come from a parametrized config test). Last
-recorded result: **85 passed, offline** (2026-10-13). This consolidation did
-not re-run pytest because the local machine has no backend venv/dependencies.
+recorded result: **85 passed, offline, on Python 3.14.4** (2026-10-31) in a
+fresh isolated venv installed from `backend/requirements.txt`. `pip check`
+reported no broken requirements. The suite emitted 62 Python 3.14 deprecation
+warnings (see §4.1) but no failures.
+
+A dependency smoke check from `backend/` with the venv active:
+
+```bash
+python -m pip check
+python -c "import fastapi, pydantic, pydantic_settings, httpx, google.genai, slowapi, uvicorn; print('imports ok')"
+```
 
 ### Web (from `frontend/`)
 
@@ -896,6 +952,14 @@ Mobile:
 ### Known gaps / unverified claims
 
 - Real Gemini API behavior (no key; no paid calls without approval).
+- Windows runtime: the Python 3.14 install was executed on Linux x86_64 only.
+  Windows x86_64 compatibility is **inferred** from cp314/abi3 wheel
+  availability for every required distribution and Uvicorn's `uvloop` platform
+  marker; it was not executed on a Windows machine.
+- Python 3.14 deprecation/SyntaxWarnings from the unchanged FastAPI, Starlette,
+  slowapi, pytest-asyncio, and anyio versions. They do not fail the suite.
+- Transitive dependencies are resolved by pip and are not fully locked; the
+  direct pins are in `backend/requirements.txt`.
 - PWA runtime: service-worker registration, installability, offline shell, and
   offline reading on a real device/visible browser.
 - Mobile runtime on an emulator or physical device; production Android export.
@@ -1098,6 +1162,8 @@ A task is done only when:
   degradation.
 - `backend/app/main.py` — CORS, body guard, rate-limit handler, global errors.
 - `backend/app/config.py` — env defaults, provider fallback, limit validation.
+- `backend/requirements.txt` — Python 3.14 pins; keep Pydantic on the validated
+  2.12.x line so cp314 wheels are used.
 - `frontend/src/db/database.ts` — Dexie schema; boolean-index hazard.
 - `frontend/src/services/lessonStore.ts` — web lesson save/download/delete
   and feed history.
@@ -1113,7 +1179,9 @@ A task is done only when:
 ### Common commands
 
 ```bash
-# Backend tests (from backend/, venv active)
+# Backend install/checks (from backend/, venv active)
+python -m pip install -r requirements.txt
+python -m pip check
 python -m pytest tests -q
 
 # Web checks (from frontend/)
