@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Loader2, Server, ShieldCheck } from 'lucide-react';
 import { usePreferences } from '../hooks/usePreferences';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { api } from '../services/api';
+import { api, API_BASE } from '../services/api';
 import { DOMAINS, SESSION_DURATIONS } from '../utils/constants';
 
 type Health = { status: string; ai_provider: string; version: string } | null;
@@ -82,7 +82,7 @@ export default function SettingsPage() {
             )}
           </p>
         )}
-        {healthError && <p className="muted">Backend unreachable at http://localhost:8000.</p>}
+        {healthError && <p className="muted">Backend unreachable at {API_BASE}.</p>}
         <button className="btn btn-ghost btn-sm" onClick={checkBackend} disabled={checking || !isOnline}>
           Re-check
         </button>

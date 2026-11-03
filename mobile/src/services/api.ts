@@ -1,9 +1,11 @@
 // API client for the ClassBreak FastAPI backend.
 // Ported from frontend/src/services/api.ts — adapted for React Native:
 // - Base URL comes from the Expo public env var EXPO_PUBLIC_API_URL
-//   (inlined at bundle time; falls back to localhost for simulators).
+//   (inlined at bundle time; validated at runtime, no native localhost default).
 // - AbortController-based 30s timeout preserved.
 // - HTTP errors keep the backend's {"detail": ...} contract.
+
+import { Platform } from 'react-native';
 
 import type {
   AnswerEvaluation,
@@ -14,15 +16,6 @@ import type {
 } from '@/types';
 import { isLessonShape } from '@/utils/helpers';
 
-/** Base URL of the ClassBreak backend.
- *
- * Configure via EXPO_PUBLIC_API_URL (e.g. in mobile/.env.local):
- *   EXPO_PUBLIC_API_URL=http://<your-PC-LAN-IP>:8000
- * Use your PC's LAN IP when running on a physical phone — "localhost"
- * on the phone refers to the phone itself, not the PC.
- */
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
-
 export class ApiError extends Error {
   status: number;
 
@@ -31,6 +24,86 @@ export class ApiError extends Error {
     this.name = 'ApiError';
     this.status = status;
   }
+}
+
+/** Base URL of the ClassBreak backend.
+ *
+ * Configure via EXPO_PUBLIC_API_URL in mobile/.env.local (see
+ * mobile/.env.example) and restart the dev server:
+ *   EXPO_PUBLIC_API_URL=http://<your-PC-LAN-IP>:8000
+ *
+ * There is deliberately no baked-in "localhost" default for native builds.
+ * On an Android phone "localhost" means the phone itself, so a silent
+ * fallback produces a confusing "network error" instead of a clear setup
+ * message. Only the web build (which runs in a browser on the same machine
+ * as the backend during development) defaults to localhost.
+ */
+const WEB_DEFAULT_API_URL = 'http://localhost:8000';
+
+export const API_CONFIG_ERROR =
+  'Backend URL is not configured. Create mobile/.env.local with ' +
+  'EXPO_PUBLIC_API_URL=http://<your-PC-LAN-IP>:8000 (see mobile/.env.example), ' +
+  'then restart Expo with: npx expo start --clear';
+
+/** Trim whitespace and any trailing slashes from a configured base URL. */
+function normalizeBaseUrl(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
+
+/** Validate a configured base URL. Returns null when it is unusable. */
+function parseBaseUrl(value: string): string | null {
+  const normalized = normalizeBaseUrl(value);
+  // Avoid the URL constructor: React Native's polyfill is incomplete. A
+  // scheme plus a non-empty host is all the client needs.
+  if (!/^https?:\/\/[^\s/?#]+/i.test(normalized)) return null;
+  return normalized;
+}
+
+let cachedApiBase: string | null = null;
+
+/**
+ * Resolve the backend base URL once per app session.
+ *
+ * Throws ApiError (status 0) with an actionable message when the URL is
+ * missing or malformed, so screens can show setup instructions instead of
+ * a generic network failure.
+ */
+export function getApiBaseUrl(): string {
+  if (cachedApiBase) return cachedApiBase;
+
+  const configured = process.env.EXPO_PUBLIC_API_URL;
+  const platform = Platform.OS;
+
+  if (!configured || configured.trim() === '') {
+    if (platform === 'web') {
+      cachedApiBase = WEB_DEFAULT_API_URL;
+      return cachedApiBase;
+    }
+    throw new ApiError(0, API_CONFIG_ERROR);
+  }
+
+  const parsed = parseBaseUrl(configured);
+  if (!parsed) {
+    throw new ApiError(
+      0,
+      `EXPO_PUBLIC_API_URL is not a valid http(s) URL: ${JSON.stringify(configured)}. ` +
+        'Example: http://192.168.1.20:8000',
+    );
+  }
+
+  if (platform !== 'web' && /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(parsed)) {
+    // Not fatal: `adb reverse tcp:8000 tcp:8000` makes this work. But it is
+    // the most common physical-device mistake, so surface it in dev logs.
+    if (__DEV__) {
+      console.warn(
+        '[ClassBreak] EXPO_PUBLIC_API_URL points at localhost, which is the ' +
+          'device itself on a phone. Use your computer LAN IP (or adb reverse).',
+      );
+    }
+  }
+
+  cachedApiBase = parsed;
+  return cachedApiBase;
 }
 
 // --- Response shape checks ------------------------------------------------
@@ -113,7 +186,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
   try {
-    const response = await fetch(`${API_BASE}${path}`, {
+    const response = await fetch(`${getApiBaseUrl()}${path}`, {
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
       ...options,
@@ -208,5 +281,3 @@ export const api = {
       return res;
     }),
 };
-
-export { API_BASE };

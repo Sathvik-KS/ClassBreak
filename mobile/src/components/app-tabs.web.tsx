@@ -6,7 +6,8 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { Pressable, View, StyleSheet } from 'react-native';
+import type { Ref } from 'react';
+import { Pressable, View, StyleSheet, type PressableInstance } from 'react-native';
 
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
@@ -36,9 +37,15 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+export function TabButton({ children, isFocused, ref, ...props }: TabTriggerSlotProps) {
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
+    // expo-router types this slot's ref as `Ref<View>` while React Native 0.88
+    // types Pressable's ref as `Ref<PressableInstance>`. Both are the same
+    // host view at runtime, so the narrow cast keeps `asChild` wiring intact.
+    <Pressable
+      {...props}
+      ref={ref as Ref<PressableInstance>}
+      style={({ pressed }) => pressed && styles.pressed}>
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
         style={styles.tabButtonView}>

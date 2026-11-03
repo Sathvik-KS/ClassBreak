@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     ai_provider: str = "auto"  # "gemini", "mock", "auto"
 
     # Server
-    cors_origins: str = "http://localhost:5173,http://localhost:4173"
+    # 5173/4173: Vite dev/preview. 8081: Expo web (npx expo start --web).
+    cors_origins: str = (
+        "http://localhost:5173,http://localhost:4173,http://localhost:8081"
+    )
 
     # Rate limiting
     rate_limit: str = "30/minute"

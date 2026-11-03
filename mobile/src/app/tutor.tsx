@@ -10,6 +10,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  type ScrollViewInstance,
 } from 'react-native';
 
 import { MarkdownText } from '@/components/markdown-text';
@@ -57,7 +58,7 @@ export default function TutorScreen() {
   const [errorMessage, setErrorMessage] = useState(
     lesson === null ? 'This screen needs a lesson. Open a lesson first.' : '',
   );
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance>(null);
 
   // Keep the newest message in view whenever the conversation grows.
   useEffect(() => {

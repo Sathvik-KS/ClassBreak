@@ -7,7 +7,8 @@ import { Colors } from '@/constants/theme';
  *  so the tab bar needs no image assets at all. */
 export default function AppTabs() {
   const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  // RN reports `null` when there is no preference yet; fall back to light.
+  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
 
   return (
     <NativeTabs

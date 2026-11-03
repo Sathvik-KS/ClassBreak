@@ -3,19 +3,20 @@
 This is the single canonical engineering document for ClassBreak. It replaces
 the previous `PROJECT_STATUS.md`, `HANDOFF.md`, `TASKS.md`, `STATUS_REPORT.md`,
 `AUDIT_REPORT.md`, `frontend/README.md`, and `mobile/README.md`. The root
-`README.md` is intentionally kept as a short human-facing introduction and
-points here for authoritative details. If project facts change, update this
-file instead of creating competing status/handoff documents.
+`README.md` is the execution-first setup guide (prerequisites, per-app setup,
+environment variables, troubleshooting, verification) and points here for
+authoritative engineering details. If project facts change, update both files
+instead of creating competing status/handoff documents.
 
 **Every coding agent (OpenCode, Antigravity, or human) must read this file and
 inspect the relevant source before changing anything.** Do not trust old
 claims or assume a feature is finished because it is described here; verify it
 in code first.
 
-Status snapshot: backend dependency/setup validation on **2026-10-31** against
-**Python 3.14.4**. Latest commit at that time was `95d187b` (documentation
-consolidation). Runtime results quoted below are the last recorded evidence;
-the backend results in §12 were rerun on the validation machine on 2026-10-31.
+Status snapshot: mobile upgraded to **Expo SDK 58** and re-verified on
+**2026-11-01** (Node 26.13.0 / npm 11.20.0, Linux x86_64), on top of commit
+`ec536af`. Backend dependency/setup validation ran on **2026-10-31** against
+**Python 3.14.4**. Runtime results quoted below are the last recorded evidence.
 
 ---
 
@@ -51,7 +52,7 @@ lives on the device (IndexedDB on web, AsyncStorage on mobile).
 ```text
 ClassBreak/
 ├── AGENTS.md                  # This file — canonical engineering guide
-├── README.md                  # Short human-facing introduction
+├── README.md                  # Execution-first setup and run guide
 ├── .gitignore                 # Ignores .env*, venv, node_modules, build output
 ├── backend/                   # FastAPI AI proxy + Wikipedia source manager
 │   ├── .env.example           # Environment template (no secrets)
@@ -66,6 +67,7 @@ ClassBreak/
 │   │   └── services/          # AI provider abstraction, Gemini, mock, Wikipedia
 │   └── tests/                 # 12 test modules + recorded Wikipedia fixtures
 ├── frontend/                  # React 19 + TypeScript + Vite web/PWA client
+│   ├── .env.example           # Web environment template (no secrets)
 │   ├── package.json
 │   ├── public/                # manifest, icons, service worker
 │   └── src/
@@ -76,8 +78,9 @@ ClassBreak/
 │       ├── services/          # HTTP client, lesson persistence
 │       ├── types/             # TypeScript mirrors of backend models
 │       └── utils/             # markdown, helpers, constants
-└── mobile/                    # Expo SDK 57 Android-first React Native app
+└── mobile/                    # Expo SDK 58 Android-first React Native app
     ├── LICENSE                # Expo template MIT notice (do not delete)
+    ├── .env.example           # Mobile environment template (no secrets)
     ├── app.json               # Expo configuration
     ├── package.json
     └── src/
@@ -318,8 +321,9 @@ text.
   are not shared across workers/instances. It is single-process cost control,
   not distributed abuse protection.
 - CORS: origins from `CORS_ORIGINS` (defaults
-  `http://localhost:5173,http://localhost:4173`); no credentials; methods
-  `GET` and `POST`; headers limited to `Content-Type`.
+  `http://localhost:5173,http://localhost:4173,http://localhost:8081` — Vite
+  dev, Vite preview, Expo web); no credentials; methods `GET` and `POST`;
+  headers limited to `Content-Type`. Native app requests bypass browser CORS.
 - Routers log real exceptions with `logger.exception` and return generic client
   messages (e.g. “Lesson generation failed”, “Feed generation failed”). A
   global handler returns 500 `{"detail": "Internal server error"}`.
@@ -382,13 +386,14 @@ force a theme.
   offline.
 - **Settings:** 16 interest chips, default duration (2/5/10 min), live
   `/api/health` status with provider/version, privacy note. The “backend
-  unreachable” message hardcodes `http://localhost:8000` even if
-  `VITE_API_URL` is different (minor known issue).
+  unreachable” message shows the effective `API_BASE`, so it stays correct
+  when `VITE_API_URL` is customized.
 
-The HTTP client (`src/services/api.ts`) uses `VITE_API_URL` with a default of
-`http://localhost:8000`, a 30 s `AbortController` timeout, parses
-`{"detail": ...}` errors, and maps timeouts to status 408 and network failures
-to status 0.
+The HTTP client (`src/services/api.ts`) resolves `VITE_API_URL` (trailing
+slashes trimmed, malformed values rejected with a clear error), defaulting to
+`http://localhost:8000` for local development, exports the effective
+`API_BASE`, uses a 30 s `AbortController` timeout, parses `{"detail": ...}`
+errors, and maps timeouts to status 408 and network failures to status 0.
 
 ### 5.4 Web persistence (IndexedDB / Dexie)
 
@@ -466,15 +471,35 @@ content.
 
 ### 6.1 Stack
 
-- Expo SDK `~57.0.31`, Expo Router `~57.0.29`, React Native `0.86.3`,
-  React `19.2.3`, React DOM `19.2.3`, TypeScript `~6.0.3`.
+- Expo SDK `~58.0.22`, Expo Router `~58.0.29`, React Native `0.88.1`,
+  React `19.3.0`, React DOM `19.3.0`, TypeScript `~6.0.3`,
+  `react-native-reanimated 4.7.1`, `react-native-worklets 0.13.0`,
+  `react-native-gesture-handler ~3.3.0`, `react-native-screens ~4.30.1`,
+  `react-native-safe-area-context ~5.10.1`, `react-native-web ~0.21.4`.
+- Requires a current **Expo Go with SDK 58**; no EAS build or custom dev client.
 - Android-first; also has iOS and web scripts via Expo.
 - Expo Router file-based navigation with `typedRoutes` and `reactCompiler`
   experiments enabled in `app.json`.
 - Bottom tabs use `expo-router/unstable-native-tabs` (`NativeTabs`) with
   Android material symbols. This is an unstable Expo API; treat upgrades with
   care.
-- Backend URL: `EXPO_PUBLIC_API_URL`, default `http://localhost:8000`.
+- **Known compatibility workaround (do not remove without verifying):**
+  `src/components/app-tabs.web.tsx` passes its `asChild` slot `ref` through as
+  `ref as Ref<PressableInstance>`. `expo-router@58` types that slot ref as
+  `Ref<View>` (`TabTriggerSlotProps`), while React Native `0.88` types
+  `Pressable`'s ref as `Ref<PressableInstance>`. Both point at the same host
+  view at runtime, so the cast is narrow and behavior-preserving; it exists
+  only to satisfy the type checker. Verify an alternative against a newer
+  `expo-router`/RN pair with `npm run typecheck` **and**
+  `npx expo export --platform web` (the native tabs path is not used on web,
+  where this file is active).
+- Backend URL: `EXPO_PUBLIC_API_URL`, resolved once at runtime by
+  `getApiBaseUrl()` in `src/services/api.ts`. Native builds have **no**
+  `localhost` default: a missing/malformed value raises `ApiError(0, ...)` with
+  setup instructions instead of a generic network error. Only `Platform.OS ===
+  'web'` falls back to `http://localhost:8000`. A `localhost` URL on native
+  logs a dev warning (it is valid only with `adb reverse`). See
+  `mobile/.env.example`.
 - 30 s timeout; HTTP errors preserve the backend `{"detail": ...}` message.
 - The mobile client performs **runtime shape validation** on every data-bearing
   API response and on lessons restored from storage, turning contract drift
@@ -522,6 +547,9 @@ excluded topics, or feed-history controls on mobile.
   skipped.
 - Lessons are **not** auto-saved on mobile at generation time; the user taps
   Save, or a quiz can save the lesson.
+- Screens surface `ApiError.message` directly, so the missing/malformed
+  `EXPO_PUBLIC_API_URL` configuration message (see §6.1) appears in the normal
+  Discover/Lesson/Quiz/Tutor error states instead of crashing.
 
 ### 6.4 Mobile persistence (AsyncStorage)
 
@@ -683,10 +711,8 @@ secrets out of docs, logs, and client bundles.
 | `MAX_RESPONSE_TOKENS` | `4096` | Defined but currently unused; Gemini hardcodes 4096. |
 | `GEMINI_TIMEOUT` | `30.0` | Seconds; bounds the Gemini call. |
 
-`backend/.env.example` currently documents `AI_PROVIDER`, `GEMINI_API_KEY`,
-`CORS_ORIGINS`, `RATE_LIMIT`, `MAX_PROMPT_LENGTH`, and `MAX_RESPONSE_TOKENS`.
-It **omits** `RATE_LIMIT_READ` and `GEMINI_TIMEOUT`; add them if you update the
-template.
+`backend/.env.example` documents every backend setting above, including
+`RATE_LIMIT_READ` and `GEMINI_TIMEOUT`.
 
 Invalid `RATE_LIMIT`/`RATE_LIMIT_READ` formats fail at startup with a clear
 Pydantic validation error.
@@ -695,13 +721,13 @@ Pydantic validation error.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `VITE_API_URL` | `http://localhost:8000` | Build-time inlined. Public. |
+| `VITE_API_URL` | `http://localhost:8000` | Build-time inlined. Public. Invalid values are rejected with a clear error. |
 
 ### Mobile (`mobile/.env.local` or shell environment)
 
 | Variable | Default | Notes |
 |---|---|---|
-| `EXPO_PUBLIC_API_URL` | `http://localhost:8000` | Inlined into the app bundle. Public. Use your PC's LAN IP for a physical phone. |
+| `EXPO_PUBLIC_API_URL` | none on native (web only: `http://localhost:8000`) | **Required for native runs.** Inlined into the app bundle. Public. Use your PC's LAN IP for a physical phone, `10.0.2.2` for the emulator, or `localhost` only with `adb reverse`. |
 
 `localhost` on a phone means the phone itself. For a physical device, the
 backend must also listen on the LAN (see the mobile run instructions below).
@@ -719,9 +745,10 @@ backend must also listen on the LAN (see the mobile run instructions below).
   setups; the dependency set installs from binary wheels. Uvicorn's `uvloop`
   extra is skipped on Windows by its platform marker.
 - Web: Node.js 22+ and npm.
-- Mobile: Node.js + npm, Expo tooling (installed via `npm install`), and
-  Expo Go or an Android emulator/device. Use Node.js 24+ for the native
-  TypeScript test command.
+- Mobile: Node.js per Expo SDK 58's engine range
+  (`^22.13.0 || ^24.3.0 || ^26.0.0 || >=27.0.0`), plus npm and a current
+  **Expo Go with SDK 58** or an Android emulator/device. Use Node.js 24+ for
+  the native TypeScript test command.
 - A Gemini API key is optional; without one the backend uses mock AI, but the
   backend is still required.
 
@@ -784,7 +811,7 @@ version. The health endpoint is <http://localhost:8000/api/health>; docs are at
 
 ```bash
 cd frontend
-npm install
+npm ci             # both apps commit package-lock.json
 npm run dev        # http://localhost:5173
 ```
 
@@ -805,7 +832,7 @@ Start the backend first (see above). Then:
 
 ```bash
 cd mobile
-npm install
+npm ci             # both apps commit package-lock.json
 npm run start      # Expo dev server; scan the QR code with Expo Go
 # or:
 npm run android
@@ -872,10 +899,10 @@ tests. Do not make tests depend on live Wikipedia or paid AI calls.
 
 Current backend test inventory: **12 test modules, 83 test functions, 85
 collected cases** (the extra two come from a parametrized config test). Last
-recorded result: **85 passed, offline, on Python 3.14.4** (2026-10-31) in a
-fresh isolated venv installed from `backend/requirements.txt`. `pip check`
-reported no broken requirements. The suite emitted 62 Python 3.14 deprecation
-warnings (see §4.1) but no failures.
+recorded result: **85 passed, offline, on Python 3.14.4** — first on
+2026-10-31, re-run on 2026-11-01 in a fresh isolated venv installed from
+`backend/requirements.txt`. `pip check` reported no broken requirements. The
+suite emitted 62 Python 3.14 deprecation warnings (see §4.1) but no failures.
 
 A dependency smoke check from `backend/` with the venv active:
 
@@ -891,10 +918,16 @@ npm run lint       # oxlint
 npm run build      # tsc -b && vite build; must pass before handoff
 ```
 
-There is no frontend test framework and no test script. Last recorded result:
-lint clean and build green with `399.68 kB` JS / `126.65 kB` gzip
-(2026-10-13). Bundle size has not been re-measured since the mobile commit; do
-not quote it as current without measuring.
+There is no frontend test framework and no test script. Last recorded result
+(2026-11-01): `npm run lint` clean and `npm run build` green with `399.77 kB`
+JS / `126.68 kB` gzip.
+
+`tsc -b` is incremental. A stale `*.tsbuildinfo` left over from an older source
+state can re-emit diagnostics for code that is already fixed (observed here as
+a false "declared but never used" error for a component that is rendered). If
+the build reports an error the source does not contain, delete
+`frontend/tsconfig*.tsbuildinfo` and `frontend/*.tsbuildinfo`, then rebuild.
+`*.tsbuildinfo` is gitignored.
 
 ### Mobile (from `mobile/`)
 
@@ -905,9 +938,27 @@ npm test           # node --test on pure helpers + review scheduler
 npx expo export --platform android   # production bundle check
 ```
 
-There are no recorded mobile check results in the consolidated docs. Run all
-four before claiming mobile work is done. The export command may require
-network access and may take a while on a low-memory machine.
+Also useful: `npx expo install --fix`, `npx expo-doctor`,
+`npx expo config --type public`, and `npx expo start` (Metro; `/status` should
+answer `packager-status:running`).
+
+Last recorded results (2026-11-01, Expo SDK 58 on Node 26.13.0 / npm 11.20.0,
+Linux x86_64):
+
+- `npx expo install --fix` → exit 0, dependency versions reported as expected.
+- `npx expo-doctor` → **20/20 checks passed**.
+- `npx expo config --type public` → `sdkVersion: 58.0.0`, name `ClassBreak`.
+- `npm run typecheck` → exit 0.
+- `npm run lint` → exit 0.
+- `npm test` → 14 tests, 14 pass, 0 fail.
+- `npx expo export --platform android` → exit 0, 3.9 MB `.hbc` bundle.
+- `npx expo export --platform web` → exit 0, static routes exported (validates
+  the web-only tab bar path).
+- `CI=1 npx expo start --port 8081` → Metro started, `/status` returned
+  `packager-status:running`, and the web shell was served at `/`.
+
+Not verified: scanning the QR code in Expo Go, running on an emulator, and any
+real-device behavior (see §13).
 
 ### Documentation-only changes
 
@@ -962,9 +1013,13 @@ Mobile:
   direct pins are in `backend/requirements.txt`.
 - PWA runtime: service-worker registration, installability, offline shell, and
   offline reading on a real device/visible browser.
-- Mobile runtime on an emulator or physical device; production Android export.
-- Physical-phone connectivity, LAN binding, and cleartext HTTP behavior.
-- Frontend bundle size after the mobile commit.
+- Mobile runtime in Expo Go / on an emulator or physical device (QR scan and
+  in-app behavior). Dependency resolution, types, lint, unit tests, Expo config,
+  Metro startup, and the production Android export **were** verified on
+  2026-11-01 (see §12); only on-device runtime is unverified.
+- Physical-phone connectivity, LAN binding, and cleartext HTTP behavior. LAN
+  binding itself was verified by curling `/api/health` over the host's LAN IP
+  with `--host 0.0.0.0`.
 - Accessibility, dark-mode visual QA, and real-Android performance.
 - No CI pipeline; checks are manual.
 - No frontend test framework (adding one requires approval/new dependencies).
@@ -983,12 +1038,9 @@ Mobile:
 - **Mobile has no Settings/preferences or feed personalization.** It requests a
   fixed feed (count 10) and generates lessons with a fixed 5-minute duration.
 - **Mobile does not implement related-topic chips** or feed history/exclusions.
-- **Web Settings error text hardcodes `http://localhost:8000`**, even when
-  `VITE_API_URL` points elsewhere.
 - **`MAX_RESPONSE_TOKENS` is unused**; Gemini hardcodes 4096.
 - **`MAX_PROMPT_LENGTH` is only used for the lesson topic check**, not globally
   for all prompts.
-- **`backend/.env.example` is missing `RATE_LIMIT_READ` and `GEMINI_TIMEOUT`.**
 - **Primary Wikipedia extracts are not truncated** before being placed in the
   lesson-generation prompt; related extracts are capped at 1,000 chars. Long
   primary extracts can increase prompt size/cost (unverified impact).
@@ -1002,6 +1054,12 @@ Mobile:
   `prefers-color-scheme` only.
 - **Mobile uses an unstable Expo API** (`expo-router/unstable-native-tabs`);
   review upgrade notes before bumping Expo.
+- **`mobile/src/components/app-tabs.web.tsx` carries a ref-type cast**
+  (`ref as Ref<PressableInstance>`) because `expo-router@58` types the
+  `TabTriggerSlotProps` ref as `Ref<View>` while RN `0.88` types `Pressable`'s
+  ref as `Ref<PressableInstance>`. It is behavior-preserving today; remove it
+  only after confirming a newer router/RN pair typechecks, then re-run
+  `npm run typecheck` and `npx expo export --platform web` (see §6.1).
 
 ### Maintenance gaps
 

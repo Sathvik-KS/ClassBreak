@@ -2,7 +2,36 @@
 
 import type { Lesson, FeedItem, TutorResponse, QuizQuestion, AnswerEvaluation } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const DEFAULT_API_BASE = 'http://localhost:8000';
+
+/**
+ * Resolve the backend base URL from VITE_API_URL.
+ *
+ * The web app runs in a browser, so `localhost` is a legitimate development
+ * default (the browser and the backend are on the same machine). A malformed
+ * value is still rejected with a clear message instead of producing an
+ * unexplained "network error".
+ */
+function resolveApiBase(): { base: string; error: string | null } {
+  const configured = import.meta.env.VITE_API_URL?.trim();
+  if (!configured) return { base: DEFAULT_API_BASE, error: null };
+
+  const normalized = configured.replace(/\/+$/, '');
+  if (!/^https?:\/\/[^\s/?#]+/i.test(normalized)) {
+    return {
+      base: normalized,
+      error:
+        `VITE_API_URL is not a valid http(s) URL: ${JSON.stringify(configured)}. ` +
+        'Example: http://localhost:8000',
+    };
+  }
+  return { base: normalized, error: null };
+}
+
+const resolvedApiBase = resolveApiBase();
+
+/** Effective backend base URL (also shown in Settings). */
+export const API_BASE = resolvedApiBase.base;
 
 class ApiError extends Error {
   status: number;
@@ -15,6 +44,8 @@ class ApiError extends Error {
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  if (resolvedApiBase.error) throw new ApiError(0, resolvedApiBase.error);
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
