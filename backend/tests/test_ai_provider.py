@@ -5,8 +5,8 @@ from app.services.ai_provider import get_ai_provider, AIProvider
 from app.services.mock_provider import MockProvider
 
 
-def test_get_provider_returns_mock_by_default():
-    """Without API key, factory returns MockProvider."""
+def test_get_provider_returns_mock_when_forced_by_test_fixture():
+    """The autouse fixture forces mock provider and clears the Gemini key."""
     provider = get_ai_provider()
     assert isinstance(provider, MockProvider)
 

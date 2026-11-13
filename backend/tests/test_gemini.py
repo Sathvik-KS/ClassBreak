@@ -39,8 +39,19 @@ async def test_generate_json_returns_parsed_dict():
     result = await provider._generate_json("system", "user")
     assert result == {"answer": "hi"}
     # The SDK call received the configured model and both prompts.
-    assert calls["kwargs"]["model"]
+    assert calls["kwargs"]["model"] == "gemini-3.6-flash"
     assert calls["kwargs"]["contents"] == "user"
+
+
+@pytest.mark.anyio
+async def test_generate_json_configures_output_budget_and_thinking():
+    provider, calls = _provider_with_fake_client()
+    await provider._generate_json("system", "user")
+    config = calls["kwargs"]["config"]
+    assert config.max_output_tokens == settings.max_response_tokens
+    assert config.thinking_config.thinking_level == "LOW"
+    assert config.response_mime_type == "application/json"
+    assert config.temperature == 0.7
 
 
 @pytest.mark.anyio

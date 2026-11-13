@@ -12,7 +12,7 @@ from app.services import prompts
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-3.6-flash"
 
 
 class GeminiProvider(AIProvider):
@@ -30,6 +30,9 @@ class GeminiProvider(AIProvider):
         (asyncio.to_thread) to keep the event loop responsive, bounded by
         settings.gemini_timeout so an unreachable provider can't hang a
         request indefinitely.
+
+        max_output_tokens comes from settings.max_response_tokens because
+        Gemini thinking tokens count toward the same output budget.
         """
         try:
             response = await asyncio.wait_for(
@@ -41,7 +44,10 @@ class GeminiProvider(AIProvider):
                         system_instruction=system_prompt,
                         response_mime_type="application/json",
                         temperature=0.7,
-                        max_output_tokens=4096,
+                        max_output_tokens=settings.max_response_tokens,
+                        thinking_config=types.ThinkingConfig(
+                            thinking_level="low"
+                        ),
                     ),
                 ),
                 timeout=settings.gemini_timeout,

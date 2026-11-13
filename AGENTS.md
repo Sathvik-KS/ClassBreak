@@ -156,7 +156,7 @@ Key properties:
   3.13 and older are not part of the validated setup.
 - FastAPI `0.115.6`, Uvicorn `0.34.0`, Pydantic `2.12.5` (with
   pydantic-core `2.41.5`), pydantic-settings `2.7.1`, httpx `0.28.1`,
-  google-genai `1.14.0`, slowapi `0.1.9`, python-dotenv `1.0.1`.
+  google-genai `2.34.0`, slowapi `0.1.9`, python-dotenv `1.0.1`.
 - Tests: pytest `8.3.4`, pytest-asyncio `0.25.0`, anyio `4.8.0`.
 - Pydantic `2.12.5` is the validated Python 3.14 version. Pydantic `2.10.4`
   pulls pydantic-core `2.27.2`, which has no cp314 wheel and fails while trying
@@ -237,17 +237,31 @@ but is a known inefficiency (a new Gemini client is built for each call).
 
 `backend/app/services/gemini.py`:
 
-- Model: `gemini-2.0-flash`.
+- Model: `gemini-3.6-flash` (stable previous-generation Flash model; free tier
+  available). Selected after `gemini-3.8-flash` returned recurring HTTP 503
+  UNAVAILABLE under load.
 - The Google Gen AI SDK call is synchronous, so it runs in a worker thread via
   `asyncio.to_thread`.
 - The call is bounded by `asyncio.wait_for(settings.gemini_timeout)`
   (default 30 s).
+- Uses low thinking (`thinking_config.thinking_level="low"`; 3.6 Flash supports
+  `minimal`, `low`, `medium`, `high`).
 - Requests JSON output (`response_mime_type="application/json"`),
-  temperature 0.7, `max_output_tokens=4096` hardcoded in the SDK config.
+  temperature 0.7, and `max_output_tokens=settings.max_response_tokens`
+  (default 8192; Gemini thinking tokens count toward this budget).
+- `temperature`/`top_p`/`top_k` are deprecated from Gemini 3.6 Flash onward and
+  are ignored by the API (future generations may reject them), so the
+  configured 0.7 no longer influences sampling.
 - Invalid/empty JSON becomes a controlled error; routers log the real exception
-  server-side and return a generic 502 message.
-- **Not verified against the real Gemini API.** No key is present, and paid
-  calls require explicit user approval.
+  server-side and return a generic 502 message. Gemini failures do not fall
+  back to mock content.
+- **No successful live Gemini generation was observed.** The observed
+  free-tier daily quota for `gemini-3.6-flash` (20 requests/day/project/model)
+  was exhausted during verification, so only the HTTP 429 path was exercised.
+  HTTP 503
+  UNAVAILABLE ("model experiencing high demand") is a transient upstream
+  capacity error; there is no app-level retry/backoff, so it surfaces as the
+  router's generic 502.
 
 ### 4.6 Mock provider
 
@@ -669,8 +683,9 @@ export, backup, sync, or account recovery.
   native text components rather than raw HTML.
 - Backend citation validation only accepts http(s) URLs; mobile additionally
   refuses non-http(s) links before opening them.
-- Real AI calls are expensive. Rate limiting must remain enabled on all
-  AI-facing routes, and real paid calls require explicit user approval.
+- Real AI calls consume free-tier quota or cost money. Rate limiting must
+  remain enabled on all AI-facing routes, and live Gemini API calls require
+  explicit user approval.
 
 ### Limitations and residual risks
 
@@ -708,7 +723,7 @@ secrets out of docs, logs, and client bundles.
 | `RATE_LIMIT` | `30/minute` | AI POST routes. Format `<number>/<second|minute|hour|day>`. |
 | `RATE_LIMIT_READ` | `60/minute` | Source search GET. Same format. |
 | `MAX_PROMPT_LENGTH` | `2000` | Currently only used for the lesson topic length check; model topic max is 200 anyway. |
-| `MAX_RESPONSE_TOKENS` | `4096` | Defined but currently unused; Gemini hardcodes 4096. |
+| `MAX_RESPONSE_TOKENS` | `8192` | Gemini output budget; includes thinking tokens. |
 | `GEMINI_TIMEOUT` | `30.0` | Seconds; bounds the Gemini call. |
 
 `backend/.env.example` documents every backend setting above, including
@@ -894,15 +909,18 @@ Windows:
 
 The suite is designed to be fully offline: `backend/tests/conftest.py` routes
 Wikipedia calls through `httpx.MockTransport` with recorded fixtures in
-`backend/tests/fixtures/`. It also resets the shared rate limiter between
-tests. Do not make tests depend on live Wikipedia or paid AI calls.
+`backend/tests/fixtures/`, forces the mock AI provider (so a real
+`GEMINI_API_KEY` in `.env` cannot turn route tests into live API calls), and
+resets the shared rate limiter between tests. The fixture also clears
+`gemini_api_key`. Do not make tests depend on live Wikipedia or live Gemini API
+calls.
 
-Current backend test inventory: **12 test modules, 83 test functions, 85
+Current backend test inventory: **12 test modules, 85 test functions, 87
 collected cases** (the extra two come from a parametrized config test). Last
-recorded result: **85 passed, offline, on Python 3.14.4** — first on
-2026-10-31, re-run on 2026-11-01 in a fresh isolated venv installed from
-`backend/requirements.txt`. `pip check` reported no broken requirements. The
-suite emitted 62 Python 3.14 deprecation warnings (see §4.1) but no failures.
+recorded result: **87 passed, offline, on Python 3.14.4** (re-run 2026-11-03
+after the Gemini Flash model migration; first recorded 2026-10-31). `pip check`
+reported no broken requirements. The suite emitted 61 Python 3.14 deprecation
+warnings (see §4.1) but no failures.
 
 A dependency smoke check from `backend/` with the venv active:
 
@@ -1002,7 +1020,8 @@ Mobile:
 
 ### Known gaps / unverified claims
 
-- Real Gemini API behavior (no key; no paid calls without approval).
+- Real Gemini generation behavior (live Gemini API calls require explicit
+  approval).
 - Windows runtime: the Python 3.14 install was executed on Linux x86_64 only.
   Windows x86_64 compatibility is **inferred** from cp314/abi3 wheel
   availability for every required distribution and Uvicorn's `uvloop` platform
@@ -1038,7 +1057,8 @@ Mobile:
 - **Mobile has no Settings/preferences or feed personalization.** It requests a
   fixed feed (count 10) and generates lessons with a fixed 5-minute duration.
 - **Mobile does not implement related-topic chips** or feed history/exclusions.
-- **`MAX_RESPONSE_TOKENS` is unused**; Gemini hardcodes 4096.
+- **Gemini thinking tokens count toward `MAX_RESPONSE_TOKENS`** (default
+  8192); long lessons may still need a higher output budget.
 - **`MAX_PROMPT_LENGTH` is only used for the lesson topic check**, not globally
   for all prompts.
 - **Primary Wikipedia extracts are not truncated** before being placed in the
@@ -1096,7 +1116,7 @@ Mobile:
 - **Provider abstraction** so Gemini can be swapped for mock/other providers
   without changing routers.
 - **Mock provider must always work without a key**, for development and tests
-  that do not require a paid AI key. It does not remove the backend or
+  that do not require a Gemini API key. It does not remove the backend or
   Wikipedia dependency (see §4.6).
 - **Rate limiting stays enabled** on all AI-facing routes as cost control.
 - **Wikipedia grounding is best-effort**, with graceful degradation.
@@ -1112,8 +1132,8 @@ Mobile:
 1. **Accounts/PostgreSQL vs. staying local-first.** The original spec mentioned
    PostgreSQL + auth; the implemented design is deliberately stateless and
    local-first. Do not change this without an explicit decision.
-2. **Real Gemini key and paid-call approval.** Mock mode is used until the user
-   approves and provides a key.
+2. **Live Gemini call approval.** A key may be configured locally, but live
+   generation calls still require explicit user approval.
 3. **New dependencies**, especially frontend test tooling (e.g. Vitest) or any
    heavy UI library.
 4. **Production deployment details** (HTTPS, hosting, auth/proxy, CORS
@@ -1142,7 +1162,7 @@ Mobile:
 - Preserve rate limiting on AI-facing routes. Keep `/api/health` exempt.
 - Use Pydantic models in `backend/app/models/` for request/response shapes.
 - Keep tests offline: use `httpx.MockTransport`/fixtures, never live
-  Wikipedia or paid AI calls.
+  Wikipedia or live Gemini API calls.
 - Python style: 4-space indent, type hints, existing logging/settings style.
 
 ### Web conventions

@@ -6,6 +6,7 @@ from pathlib import Path
 import httpx
 import pytest
 from httpx import AsyncClient, ASGITransport
+from app.config import settings
 from app.main import app
 from app.services import source_manager
 
@@ -37,6 +38,20 @@ def offline_wikipedia(monkeypatch):
 
     monkeypatch.setattr(source_manager, "_make_client", factory)
     return factory
+
+
+@pytest.fixture(autouse=True)
+def offline_ai_provider(monkeypatch):
+    """Force the mock AI provider so tests never call the live Gemini API.
+
+    A developer's .env may contain a real GEMINI_API_KEY with AI_PROVIDER=auto;
+    without this override, route tests would issue live (quota-limited) Gemini
+    requests. Clearing the key as well keeps the isolation in place even if
+    code later inspects the key directly instead of the effective provider.
+    Both values are restored automatically by monkeypatch.
+    """
+    monkeypatch.setattr(settings, "ai_provider", "mock")
+    monkeypatch.setattr(settings, "gemini_api_key", "")
 
 
 @pytest.fixture

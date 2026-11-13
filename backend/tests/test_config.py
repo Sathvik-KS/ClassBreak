@@ -11,6 +11,10 @@ def _settings(**kwargs) -> Settings:
     return Settings(_env_file=None, **kwargs)
 
 
+def test_default_max_response_tokens_is_8192():
+    assert _settings().max_response_tokens == 8192
+
+
 def test_auto_without_key_uses_mock():
     assert _settings(ai_provider="auto", gemini_api_key="").effective_ai_provider == "mock"
 

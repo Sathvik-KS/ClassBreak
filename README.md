@@ -309,7 +309,7 @@ Mobile: `mobile/.env.local` (copy from `mobile/.env.example`).
 | `RATE_LIMIT` | Limit for AI POST routes | `30/minute` | backend | No (default `30/minute`) |
 | `RATE_LIMIT_READ` | Limit for source search | `60/minute` | backend | No (default `60/minute`) |
 | `MAX_PROMPT_LENGTH` | Max lesson topic length | `2000` | backend | No |
-| `MAX_RESPONSE_TOKENS` | Reserved; Gemini currently hardcodes 4096 | `4096` | backend | No (unused) |
+| `MAX_RESPONSE_TOKENS` | Gemini output budget; includes thinking tokens | `8192` | backend | No (default `8192`) |
 | `GEMINI_TIMEOUT` | Gemini request timeout (seconds) | `30.0` | backend | No (default `30.0`) |
 | `VITE_API_URL` | Backend base URL for the web client | `http://localhost:8000` | web | No (defaults to it) |
 | `EXPO_PUBLIC_API_URL` | Backend base URL for the mobile app | `http://<your-LAN-IP>:8000` | mobile | **Yes** for native |

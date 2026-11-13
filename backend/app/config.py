@@ -26,8 +26,9 @@ class Settings(BaseSettings):
     rate_limit_read: str = "60/minute"
 
     # Generation limits
+    # Gemini thinking tokens count toward max_response_tokens.
     max_prompt_length: int = 2000
-    max_response_tokens: int = 4096
+    max_response_tokens: int = 8192
 
     # Gemini request timeout (seconds) — enforced around the SDK call so an
     # unreachable provider can't hang a request indefinitely.
